@@ -23,7 +23,7 @@ LOCAL_RADAR_URL=https://globe.adsb.lol/ npm start
 Raspberry Pi OS 64-bit Desktop, logged in as the desktop user, SDR and GPS plugged in:
 
 ```sh
-git clone <this repo> ~/flight-radar && cd ~/flight-radar
+git clone https://github.com/dripster82/flight-radar-display.git ~/flight-radar && cd ~/flight-radar
 scripts/install.sh 51.5000 -0.1000   # home latitude and longitude (optional)
 sudo reboot
 ```
