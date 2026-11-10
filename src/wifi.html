@@ -4,49 +4,62 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'">
 <title>Settings</title>
+<link rel="stylesheet" href="theme.css">
 <style>
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #0b1622; color: #c9d6e3; overflow: hidden; }
-  body { font: 17px system-ui, sans-serif; user-select: none; display: flex; flex-direction: column; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+  body { font: 17px var(--font); user-select: none; display: flex; flex-direction: column; min-height: 100vh; }
   button { font: inherit; color: inherit; border: 0; touch-action: manipulation; }
   [hidden] { display: none !important; }
 
   header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 52px; }
-  header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 600; color: #fff;
+  header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 600; color: var(--strong);
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #status { padding: 0 12px 6px; min-height: 26px; font-size: 15px; color: #8fa3b8; }
-  #status.error { color: #ff8a80; }
-  .action { background: #13243a; border-radius: 8px; padding: 8px 16px; min-height: 36px; }
-  .action.primary { background: #f5c518; color: #0b1622; font-weight: 600; }
+  #status { padding: 0 12px 6px; min-height: 26px; font-size: 15px; color: var(--muted); }
+  #status.error { color: var(--bad); }
+  .action { background: var(--panel); border-radius: 8px; padding: 8px 16px; min-height: 36px; }
+  .action.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-  #networks { flex: 1; overflow-y: auto; margin: 0; padding: 0 12px 12px; list-style: none; }
+  #networks { margin: 0; padding: 0 12px 12px; list-style: none; }
   #networks li { display: flex; gap: 6px; margin-bottom: 6px; }
   #networks .network { display: flex; flex: 1; min-width: 0; align-items: center; gap: 12px; text-align: left;
-                       background: #13243a; border-radius: 8px; padding: 0 14px; min-height: 52px; }
-  #networks .forget { background: #13243a; border-radius: 8px; padding: 0 14px; font-size: 14px; color: #8fa3b8; }
-  #networks .forget.confirm { background: #7a2020; color: #fff; }
-  #networks .name { flex: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #networks .meta { font-size: 14px; color: #8fa3b8; }
-  #networks .connected .meta { color: #7ddc8a; }
+                       background: var(--panel); border-radius: 8px; padding: 0 14px; min-height: 52px; }
+  #networks .forget { background: var(--panel); border-radius: 8px; padding: 0 14px; font-size: 14px; color: var(--muted); }
+  #networks .forget.confirm { background: var(--danger); color: #ffffff; }
+  #networks .name { flex: 1; color: var(--strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #networks .meta { font-size: 14px; color: var(--muted); }
+  #networks .connected .meta { color: var(--ok); }
 
   #display { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
-  #display .label { flex: 1; color: #fff; font-weight: 600; font-size: 18px; }
+  #display .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
   #display #level { min-width: 52px; text-align: center; }
   #display .action { min-width: 48px; }
-  #display .action.on { background: #f5c518; color: #0b1622; font-weight: 600; }
+  #display .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+
+  #home { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
+  #home .label { color: var(--strong); font-weight: 600; font-size: 18px; }
+  #home #homeText { flex: 1; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #home .action:disabled { opacity: .45; }
+  #home .action.confirm { background: var(--danger); color: #ffffff; }
+  #home .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  #home .action { white-space: nowrap; }
 
   #entry { flex: 1; display: flex; flex-direction: column; }
   #password { margin: 0 12px 8px; padding: 0 12px; height: 44px; line-height: 42px; border-radius: 8px;
-              background: #13243a; color: #fff; font: 20px ui-monospace, monospace;
+              background: var(--panel); color: var(--strong); font: 20px ui-monospace, monospace;
               white-space: pre; overflow: hidden; direction: rtl; text-align: left; }
-  #password:empty::before { content: 'Password'; color: #5d7187; font-family: system-ui, sans-serif; }
+  #password:empty::before { content: 'Password'; color: var(--muted); font-family: var(--font); }
   #keys { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 0 5px 5px; }
   #keys .row { flex: 1; display: flex; gap: 5px; }
-  #keys button { flex: 1; min-width: 0; background: #1c3350; border-radius: 6px; font-size: 22px; color: #fff; }
-  #keys button:active { background: #2c4a70; }
-  #keys button.wide { flex: 1.6; font-size: 16px; background: #13243a; }
+  #keys button { flex: 1; min-width: 0; background: var(--key); border-radius: 6px; font-size: 22px; color: var(--strong); }
+  #keys button:active { background: var(--key-active); }
+  #keys button.wide { flex: 1.6; font-size: 16px; background: var(--panel); }
   #keys button.space { flex: 5; }
-  #keys button.on { background: #f5c518; color: #0b1622; }
+  #keys button.on { background: var(--accent); color: var(--accent-text); }
+
+  .choices { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
+  .choices .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
+  .choices .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -56,6 +69,18 @@
     <span id="level"></span>
     <button class="action" id="brighter" aria-label="Brighter">+</button>
     <button class="action" id="nightDim"></button>
+  </div>
+  <div id="home">
+    <span class="label">Home</span>
+    <span id="homeText"></span>
+    <button class="action" id="feedWait"></button>
+    <button class="action" id="setHome">Set home to GPS position</button>
+  </div>
+  <div id="themes" class="choices">
+    <span class="label">Theme</span>
+  </div>
+  <div id="mapStyles" class="choices">
+    <span class="label">Local map</span>
   </div>
   <header>
     <h1 id="title">Wi-Fi networks</h1>
@@ -82,12 +107,48 @@
 
   function drawDisplay() {
     $('display').hidden = !screen || !screen.available || Boolean(target);
+    for (const id of ['themes', 'mapStyles']) $(id).hidden = !screen || Boolean(target);
     if (!screen) return;
+    document.documentElement.dataset.theme = screen.theme;
+    // One button per choice; the current one is highlighted.
+    const choices = (rowId, options, current, key) => {
+      if (!document.querySelector(`#${rowId} button`)) {
+        for (const option of options) {
+          const b = document.createElement('button');
+          b.className = 'action';
+          b.dataset.id = option.id;
+          b.textContent = option.name;
+          b.addEventListener('click', () => setDisplay({ [key]: option.id }));
+          $(rowId).append(b);
+        }
+      }
+      for (const b of document.querySelectorAll(`#${rowId} button`)) b.classList.toggle('on', b.dataset.id === current);
+    };
+    choices('themes', screen.themes, screen.theme, 'theme');
+    choices('mapStyles', screen.mapStyles, screen.mapStyle, 'mapStyle');
     $('level').textContent = `${screen.brightness}%`;
     $('nightDim').textContent = screen.night ? `Dim ${screen.night.from}–${screen.night.to}: ${screen.nightDim ? 'On' : 'Off'}` : '';
     $('nightDim').hidden = !screen.night;
     $('nightDim').classList.toggle('on', screen.nightDim);
   }
+  // Home position: where the device lives. Resetting it to the GPS position is for after a house move.
+  let homeConfirm = null;
+  function drawHome(info, note) {
+    $('home').hidden = Boolean(target);
+    const at = info.home ? `${info.home.latitude.toFixed(4)}, ${info.home.longitude.toFixed(4)}` : 'not set';
+    const gps = !info.hasGps ? 'no GPS fix' : info.distanceKm === null ? 'GPS ready' : `GPS is ${info.distanceKm < 10 ? info.distanceKm.toFixed(1) : Math.round(info.distanceKm)} km away`;
+    $('homeText').textContent = note || `${at} · ${gps}`;
+    $('setHome').disabled = !info.hasGps;
+    $('feedWait').textContent = `Feed waits for GPS: ${info.feedRequiresGps ? 'On' : 'Off'}`;
+    $('feedWait').classList.toggle('on', info.feedRequiresGps);
+    $('feedWait').dataset.on = info.feedRequiresGps ? '1' : '';
+  }
+  async function refreshHome() { if (!homeConfirm) drawHome(await window.radar.homeGet()); }
+  function endHomeConfirm() {
+    clearTimeout(homeConfirm); homeConfirm = null;
+    $('setHome').classList.remove('confirm'); $('setHome').textContent = 'Set home to GPS position';
+  }
+
   async function setDisplay(patch) { screen = await window.radar.displaySet(patch); drawDisplay(); }
 
   function setStatus(text, isError = false) {
@@ -99,6 +160,7 @@
     target = null;
     $('title').textContent = 'Wi-Fi networks';
     for (const [id, hidden] of [['networks', false], ['refresh', false], ['entry', true], ['cancel', true], ['join', true]]) $(id).hidden = hidden;
+    $('home').hidden = false;
     drawDisplay();
   }
 
@@ -106,6 +168,7 @@
     target = network; password = ''; layer = 'abc'; shift = false;
     $('title').textContent = network.ssid;
     for (const [id, hidden] of [['networks', true], ['refresh', true], ['entry', false], ['cancel', false], ['join', false]]) $(id).hidden = hidden;
+    $('home').hidden = true;
     drawKeys(); drawPassword(); drawDisplay();
   }
 
@@ -233,6 +296,21 @@
   $('darker').addEventListener('click', () => setDisplay({ brightness: screen.brightness - 10 }));
   $('brighter').addEventListener('click', () => setDisplay({ brightness: screen.brightness + 10 }));
   $('nightDim').addEventListener('click', () => setDisplay({ nightDim: !screen.nightDim }));
+  // Changing home needs a second tap: it decides where the Flightradar24 feed is allowed to run.
+  $('setHome').addEventListener('click', async () => {
+    if (!homeConfirm) {
+      $('setHome').classList.add('confirm'); $('setHome').textContent = 'Tap again to confirm';
+      homeConfirm = setTimeout(() => { endHomeConfirm(); refreshHome(); }, 4000);
+      return;
+    }
+    endHomeConfirm();
+    const { result, error } = await window.radar.homeSet();
+    if (error) return drawHome(await window.radar.homeGet(), error);
+    drawHome(result, result.receiverUpdated ? 'Home updated to the GPS position.' : 'Home updated, but the receiver\'s own location could not be changed.');
+  });
+  $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
+  refreshHome();
+  setInterval(refreshHome, 5000);
   window.radar.displayGet().then((d) => { screen = d; drawDisplay(); });
   window.radar.onActive((name) => { if (name === 'wifi' && !target) refresh(); });
 </script>

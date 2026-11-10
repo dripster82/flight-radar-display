@@ -53,6 +53,29 @@ if [ $# -eq 2 ]; then
   sudo readsb-set-location "$1" "$2"
 fi
 
+step "Range rings and distance units on the local map"
+# Distance circles around the receiver, at the distances listed in config.json, in its distanceUnits
+# (km, miles or nautical). Only distances change unit: altitude stays in feet and speed in knots.
+# tar1090 draws rings by default, but at 100-250 nautical miles, which is off screen at a local zoom.
+rings="$(sed -n 's/.*"rangeRings": *\[\([0-9., ]*\)\].*/\1/p' "$REPO/config.json")"
+case "$(sed -n 's/.*"distanceUnits": *"\([a-z]*\)".*/\1/p' "$REPO/config.json")" in
+  km) units=metric ;;
+  miles) units=imperial ;;
+  *) units=nautical ;;
+esac
+map_config=/usr/local/share/tar1090/html/config.js
+if [ -n "$rings" ] && [ -f "$map_config" ]; then
+  sudo sed -i '/flight-radar-display$/d' "$map_config"   # replace our earlier lines, if any
+  printf '%s\n' \
+    "distanceUnits = \"$units\"; // flight-radar-display" \
+    "SiteShow = true; // flight-radar-display" \
+    "SiteCircles = true; // flight-radar-display" \
+    "SiteCirclesDistances = new Array($rings); // flight-radar-display" | sudo tee -a "$map_config" >/dev/null
+  echo "rings at $rings ($units)"
+else
+  echo "skipped (no rangeRings in config.json, or the map is not installed)"
+fi
+
 step "Electron $ELECTRON_VERSION"
 if [ "$(cat "$ELECTRON_DIR/version" 2>/dev/null)" != "$ELECTRON_VERSION" ]; then
   zip="$(mktemp --suffix=.zip)"

@@ -1,0 +1,32 @@
+/* Colour themes for the app's own pages (tab bar and Settings). The map pages are web sites and keep their own look.
+   The theme is chosen in Settings and applied as data-theme on <html> by preload.js. */
+:root, [data-theme="navy"] {
+  --bg: #0b1622; --panel: #13243a; --key: #1c3350; --key-active: #2c4a70; --line: #1d3048;
+  --text: #c9d6e3; --strong: #ffffff; --muted: #9db0c5;
+  --accent: #f5c518; --accent-text: #0b1622;
+  --ok: #4cd964; --bad: #ff6b5f; --warn: #f5a623; --idle: #4a5c70; --danger: #7a2020;
+  --font: system-ui, sans-serif;
+}
+[data-theme="graphite"] {
+  --bg: #101214; --panel: #1f262b; --key: #2a3339; --key-active: #3a464d; --line: #2a3238;
+  --text: #dbe2e6; --strong: #ffffff; --muted: #a9b4bb;
+  --accent: #35d0e0; --accent-text: #06181b; --idle: #55626a;
+}
+[data-theme="forest"] {
+  --bg: #0f1513; --panel: #18221e; --key: #223029; --key-active: #304339; --line: #25322d;
+  --text: #dbe6e0; --strong: #ffffff; --muted: #a9b8b0;
+  --accent: #3ddc97; --accent-text: #06140e; --idle: #55675f;
+}
+[data-theme="day"] {
+  --bg: #f4f7f9; --panel: #e1e8ed; --key: #d3dde4; --key-active: #bccad3; --line: #c9d4db;
+  --text: #24323d; --strong: #14202b; --muted: #4b5a66;
+  --accent: #14202b; --accent-text: #ffffff;
+  --ok: #15803d; --bad: #b91c1c; --warn: #b45309; --idle: #8a99a5; --danger: #b91c1c;
+}
+[data-theme="amber"] {
+  --bg: #0a0a08; --panel: #1a160a; --key: #241e0d; --key-active: #3a2f12; --line: #4a3a12;
+  --text: #ffb000; --strong: #ffd166; --muted: #d9c28f;
+  --accent: #ffb000; --accent-text: #0a0a08;
+  --ok: #7dff9a; --warn: #ffffff; --idle: #6b5520;
+  --font: ui-monospace, Menlo, monospace;
+}

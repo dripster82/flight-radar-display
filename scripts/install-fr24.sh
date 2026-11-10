@@ -25,6 +25,10 @@ read -r -p "Register this receiver with Flightradar24 now? [y/N] " answer
 [ "$answer" = "y" ] || { echo "Nothing done."; exit 0; }
 
 wget -qO- https://fr24.com/install.sh | sudo bash -s
-sudo systemctl enable --now fr24feed
+# The feeder must not start by itself at boot: the app starts it once GPS confirms the device is
+# at home (see controlFeedFromGps in src/main.js). It is started now so the sign-up can be checked.
+sudo systemctl disable fr24feed
+sudo systemctl start fr24feed
 echo
 echo "Check the feed with:  fr24feed-status"
+echo "From the next boot the feed starts only after the GPS shows the device is at home."

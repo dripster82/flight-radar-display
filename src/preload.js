@@ -8,6 +8,15 @@ contextBridge.exposeInMainWorld('radar', {
   wifiList: () => ipcRenderer.invoke('wifi:list'),
   wifiConnect: (ssid, password) => ipcRenderer.invoke('wifi:connect', ssid, password),
   wifiForget: (ssid) => ipcRenderer.invoke('wifi:forget', ssid),
+  homeGet: () => ipcRenderer.invoke('home:get'),
+  homeSet: () => ipcRenderer.invoke('home:set'),
+  homeFeedWait: (value) => ipcRenderer.invoke('home:feedWait', value),
   displayGet: () => ipcRenderer.invoke('display:get'),
   displaySet: (patch) => ipcRenderer.invoke('display:set', patch),
 });
+
+// The colour theme is set on <html> before the page draws, and updated live when it is changed in Settings.
+const applyTheme = (theme) => { if (document.documentElement) document.documentElement.dataset.theme = theme; };
+applyTheme(ipcRenderer.sendSync('theme:get'));
+window.addEventListener('DOMContentLoaded', () => applyTheme(ipcRenderer.sendSync('theme:get')));
+ipcRenderer.on('theme', (_e, theme) => applyTheme(theme));
