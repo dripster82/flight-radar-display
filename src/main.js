@@ -1,13 +1,58 @@
 // Flight Radar Display: one window, a tab bar, and a full view per tab.
 // All views stay loaded so switching tabs is instant and FR24 keeps its state.
-const { app, BaseWindow, WebContentsView, ipcMain } = require('electron');
+const { app, BaseWindow, WebContentsView, ipcMain, session } = require('electron');
 const { execFile } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const wifi = require('./wifi');
 const gps = require('./gps');
 const feed = require('./feed');
 const display = require('./display');
+
+// With power-cut protection on, the system is read-only and the app's data lives in separate
+// writable storage areas (see scripts/data-area.sh): the browser's data, which holds the
+// Flightradar24 sign-in, in one, and the settings files in another. The web cache is kept out of
+// storage, in memory: it is large, rewritten constantly, and not worth keeping.
+if (process.env.FLIGHT_RADAR_DATA_DIR) {
+  app.setPath('userData', process.env.FLIGHT_RADAR_DATA_DIR);
+  app.commandLine.appendSwitch('disk-cache-dir', path.join(os.tmpdir(), 'flight-radar-cache'));
+}
+const SETTINGS_DIR = process.env.FLIGHT_RADAR_SETTINGS_DIR || app.getPath('userData');
+
+// After something in storage changes, a fresh backup of that area is requested, so the change is
+// in a backup within seconds. Several changes close together make one backup. This is the ONLY
+// thing that causes a backup: there is none on a schedule or at start-up, because each one
+// overwrites an older good backup and is a moment when a power cut could spoil one.
+// (The backup itself is done by scripts/data-area.sh, which checks the area first and the copy after.)
+const backupTimers = {};
+function requestBackup(area, prepare) {
+  if (!process.env.FLIGHT_RADAR_SETTINGS_DIR) return; // protection is off: there are no storage areas
+  clearTimeout(backupTimers[area]);
+  backupTimers[area] = setTimeout(async () => {
+    if (prepare) await prepare().catch(() => {});
+    const stand_in = process.env.FLIGHT_RADAR_BACKUP_CMD; // dev stand-in
+    const [file, args] = stand_in ? [stand_in, [area]] : ['sudo', ['-n', 'systemctl', 'start', `flight-radar-backup@${area}.service`]];
+    execFile(file, args, { timeout: 120000 }, () => {});
+  }, 3000);
+}
+
+// The Flightradar24 sign-in is written by the browser, not by the app, so the app watches for it
+// changing: these are the cookies Flightradar24 sets on signing in and clears on signing out.
+// (The site's many other cookies change constantly and are not worth a backup.) The browser is
+// told to write its cookies to storage first, so the backup holds the new sign-in.
+const SIGN_IN_COOKIES = ['_frr', '_frc'];
+function backUpSignInWhenItChanges() {
+  const { cookies } = session.fromPartition(tabs.fr24.partition);
+  cookies.on('changed', (_event, cookie) => {
+    if (SIGN_IN_COOKIES.includes(cookie.name) && cookie.domain.endsWith('flightradar24.com')) {
+      requestBackup('browser', () => cookies.flushStore());
+    }
+  });
+}
+// Left by the boot script when it had to restore an area from a backup or from the defaults.
+const RESTORED_NOTE = process.env.FLIGHT_RADAR_RESTORED_NOTE || '/run/flight-radar-data-restored';
+const storageRestored = () => { try { return fs.readFileSync(RESTORED_NOTE, 'utf8').trim(); } catch { return null; } };
 
 const config = require('../config.json');
 if (process.env.LOCAL_RADAR_URL) config.localRadarUrl = process.env.LOCAL_RADAR_URL;
@@ -22,7 +67,7 @@ let home = config.home && Number.isFinite(config.home.latitude) && Number.isFini
 // Choices made on the device's Settings screen are kept in the app's data folder and replace
 // the matching values in config.json: the home position ("Set home to GPS position", used after
 // moving house) and whether the feed waits for GPS.
-const DEVICE_FILE = path.join(app.getPath('userData'), 'location.json');
+const DEVICE_FILE = path.join(SETTINGS_DIR, 'location.json');
 let onDevice = {};
 try { onDevice = JSON.parse(fs.readFileSync(DEVICE_FILE, 'utf8')); } catch { /* nothing chosen on the device yet */ }
 if (!process.env.HOME_LOCATION && onDevice.home && Number.isFinite(onDevice.home.latitude) && Number.isFinite(onDevice.home.longitude)) {
@@ -31,7 +76,10 @@ if (!process.env.HOME_LOCATION && onDevice.home && Number.isFinite(onDevice.home
 let feedRequiresGps = typeof onDevice.feedRequiresGps === 'boolean' ? onDevice.feedRequiresGps : config.feedRequiresGps !== false;
 const saveOnDevice = (patch) => {
   onDevice = { ...onDevice, ...patch };
-  fs.writeFileSync(DEVICE_FILE, JSON.stringify(onDevice));
+  // Written to a new file and then swapped in, so a power cut leaves the old file or the new one, never half of one.
+  fs.writeFileSync(`${DEVICE_FILE}.tmp`, JSON.stringify(onDevice));
+  fs.renameSync(`${DEVICE_FILE}.tmp`, DEVICE_FILE);
+  requestBackup('settings');
 };
 
 // The 7" Touch Display 2 is 1280x720 in landscape, which is so dense that pages drawn at 100%
@@ -240,7 +288,8 @@ async function captureAndQuit() {
 
 app.whenReady().then(() => {
   // Before any page loads: each of our pages asks for the theme as it starts.
-  display.init(config, app.getPath('userData'));
+  display.init(config, SETTINGS_DIR);
+  backUpSignInWhenItChanges();
   ipcMain.on('theme:get', (event) => { event.returnValue = display.get().theme; });
 
   win = new BaseWindow({
@@ -286,15 +335,17 @@ app.whenReady().then(() => {
   // Errors come back as { error } so the page can show the message as plain text.
   const reply = (work) => work.then((result) => ({ result }), (err) => ({ error: err.message }));
   ipcMain.handle('wifi:list', () => reply(wifi.list()));
-  ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(wifi.connect(ssid, password).then(sendStatus)));
-  ipcMain.handle('wifi:forget', (_e, ssid) => reply(wifi.forget(ssid).then(sendStatus)));
+  const wifiChanged = () => { requestBackup('wifi'); return sendStatus(); };
+  ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(wifi.connect(ssid, password).then(wifiChanged)));
+  ipcMain.handle('wifi:forget', (_e, ssid) => reply(wifi.forget(ssid).then(wifiChanged)));
   ipcMain.handle('home:get', () => homeInfo());
   ipcMain.handle('home:set', () => reply(setHomeToGps()));
   ipcMain.handle('home:feedWait', (_e, value) => setFeedRequiresGps(value));
-  ipcMain.handle('display:get', () => display.get());
+  ipcMain.handle('display:get', () => ({ ...display.get(), storageRestored: storageRestored() }));
   ipcMain.handle('display:set', (_e, patch) => {
     const before = display.mapStyle().id;
     const result = display.update(patch || {});
+    requestBackup('settings');
     bar.webContents.send('theme', result.theme); // the settings page restyles itself; the tab bar is told here
     if (result.mapStyle !== before) { // reload the local map in its new style
       tabs.local.url = localUrl();

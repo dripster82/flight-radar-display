@@ -37,6 +37,51 @@ and emails the account holder:
 scripts/install-fr24.sh
 ```
 
+## Power-cut protection
+
+So the plug can be pulled at any time without harm, the system can be made read-only. Do this
+last, once Wi-Fi is joined, Flightradar24 is signed in, and the home position and theme are chosen:
+
+```sh
+scripts/protect.sh enable
+sudo reboot
+```
+
+- **The system** becomes read-only: nothing written while it runs reaches the SD card, so a power
+  cut cannot corrupt it.
+- **Three small storage areas** stay writable, one each for the Settings choices, the saved Wi-Fi
+  networks, and the Flightradar24 sign-in. Each is its own pre-sized file on the boot partition
+  with its own journaled filesystem, so a fault in one never touches the others.
+- **Two backups of each area.** A backup always exists before an area is changed. A new backup is
+  made within seconds of a change, and only then: when Settings are changed, when a Wi-Fi network
+  is joined or forgotten, and when the Flightradar24 sign-in changes (signing in or out). Nothing
+  is backed up on a schedule or at start-up, because every backup overwrites an older good one
+  and is one more moment for a power cut to land in.
+- **Everything is checked before anything is replaced.** The area must pass its checks or no
+  backup is made. Both existing backups are re-read against their checksums, and the new backup
+  overwrites one that fails, or else the older; never the most recent good one. The area is
+  frozen while it is copied, so the area and its backups are never being written at the same
+  moment. The new copy is trusted only after it has been read back from the card, matches the
+  area exactly, and its filesystem checks clean; otherwise it is discarded and the previous
+  backup stands.
+- **Defaults** are a copy of all three areas as they were when protection was switched on, kept
+  on the read-only system and never written again.
+- **Auto-restore:** at every start-up each area is checked. One that is missing, damaged beyond
+  repair, unwritable, or (for settings) holds a corrupt file is replaced by its most recent intact
+  backup, or the previous one if that is not intact. If neither can be used, that area alone is
+  reformatted and refilled from the defaults. Settings shows a notice saying what was restored.
+
+| Power is lost while... | At the next start-up |
+|---|---|
+| nothing is being written | Everything is as it was |
+| an area is being changed | That area is restored from its most recent backup if it was damaged |
+| a backup is being written | The half-written backup is ignored (the other backup still stands) and is replaced at the next change; the area itself was not being written |
+| both of the above, on different occasions | The previous backup is used |
+
+To update or change the system later: `scripts/protect.sh disable`, reboot, make the change, then
+`scripts/protect.sh enable` again (which also re-saves the defaults). `scripts/protect.sh status`
+shows what is in force.
+
 ## What is on screen
 
 - **My Receiver / Flightradar24** tabs. Tapping the tab you are on returns it to its home view.

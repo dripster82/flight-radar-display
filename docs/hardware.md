@@ -12,10 +12,12 @@ Updated 10 November 2026. Target: finished by 10 December 2026.
 | Antenna | NooElec ADS-B Discovery 3dBi bundle (1090 MHz) | £16.72 | Not rechecked |
 | Antenna extension | Boobrie 15cm SMA bulkhead cables, pack of 2 | £6.95 | Not rechecked |
 | GPS | Stemedu VK-172 USB GPS/GLONASS | £13.90 | Not rechecked |
-| **Subtotal** | | **£231.42** | |
+| Power extension | RUXELY USB-C extension cable, 0.2 m | £8.99 | Price given by Paul |
+| **Subtotal** | | **£240.41** | |
 
-Still to choose: power supply (official Raspberry Pi 4 USB-C, 5.1V 3A) and a 32GB or 64GB
-high-endurance microSD card.
+Already owned, so not costed: a spare 32GB microSD card, and a USB-C cable and power plug. The
+plug needs to supply 5V at 3A (15W): with the screen, receiver, GPS and fan attached, a weaker
+one causes low-voltage warnings and random restarts.
 
 Replaced: the Freenove 7" 800x480 touchscreen (£38.95) and the plan for a custom 3D-printed
 enclosure.

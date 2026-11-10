@@ -57,6 +57,7 @@
   #keys button.space { flex: 5; }
   #keys button.on { background: var(--accent); color: var(--accent-text); }
 
+  #restored { white-space: pre-line; margin: 8px 12px 0; padding: 10px 12px; border-radius: 8px; background: var(--danger); color: #ffffff; font-size: 15px; }
   .choices { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
   .choices .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
   .choices .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -76,6 +77,7 @@
     <button class="action" id="feedWait"></button>
     <button class="action" id="setHome">Set home to GPS position</button>
   </div>
+  <div id="restored" hidden></div>
   <div id="themes" class="choices">
     <span class="label">Theme</span>
   </div>
@@ -311,7 +313,14 @@
   $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
   refreshHome();
   setInterval(refreshHome, 5000);
-  window.radar.displayGet().then((d) => { screen = d; drawDisplay(); });
+  window.radar.displayGet().then((d) => {
+    screen = d;
+    drawDisplay();
+    if (d.storageRestored) {
+      $('restored').textContent = d.storageRestored; // written by scripts/data-area.sh when it had to restore something, one line per area
+      $('restored').hidden = false;
+    }
+  });
   window.radar.onActive((name) => { if (name === 'wifi' && !target) refresh(); });
 </script>
 </body>

@@ -60,7 +60,11 @@ function update(patch) {
   if (typeof patch.nightDim === 'boolean') settings.nightDim = patch.nightDim;
   if (THEMES.some((theme) => theme.id === patch.theme)) settings.theme = patch.theme;
   if (MAP_STYLES.some((style) => style.id === patch.mapStyle)) settings.mapStyle = patch.mapStyle;
-  try { fs.writeFileSync(settingsFile, JSON.stringify(settings)); } catch { /* still applies for this session */ }
+  try {
+    // New file, then swapped in: a power cut leaves the old settings or the new ones, never half a file.
+    fs.writeFileSync(`${settingsFile}.tmp`, JSON.stringify(settings));
+    fs.renameSync(`${settingsFile}.tmp`, settingsFile);
+  } catch { /* still applies for this session */ }
   apply();
   return get();
 }

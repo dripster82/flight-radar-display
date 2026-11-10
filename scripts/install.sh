@@ -120,3 +120,4 @@ fi
 step "Done"
 echo "Local map:  http://localhost/tar1090/"
 echo "Reboot to start the kiosk:  sudo reboot"
+echo "Once everything is set up, protect it against power cuts:  scripts/protect.sh enable"
