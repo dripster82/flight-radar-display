@@ -39,5 +39,10 @@ scripts/install-fr24.sh
 
 ## Settings
 
-`config.json`: the two URLs, which tab opens first (`local` or `fr24`), and `kiosk`.
-`LOCAL_RADAR_URL` and `KIOSK=1` override it from the environment.
+`config.json`: the two URLs, which tab opens first (`local` or `fr24`), `kiosk`, `home`, and
+`zoom` (1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen).
+`LOCAL_RADAR_URL`, `KIOSK=1` and `HOME_LOCATION=lat,lon` override it from the environment.
+
+`home` is what Flightradar24's "my location" button uses when there is no GPS fix, for example
+`"home": { "latitude": 51.5, "longitude": -0.1 }`. With no GPS and no `home`, that button
+cannot work: the browser has no other way to know where it is.

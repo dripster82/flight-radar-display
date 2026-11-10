@@ -2,5 +2,7 @@
   "localRadarUrl": "http://localhost/tar1090/",
   "fr24Url": "https://www.flightradar24.com/",
   "startTab": "local",
+  "home": { "latitude": 53.9583, "longitude": -1.0803 },
+  "zoom": 1.5,
   "kiosk": false
 }

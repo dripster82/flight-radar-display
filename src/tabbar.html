@@ -12,12 +12,14 @@
     background: none; color: #8fa3b8; font: inherit; letter-spacing: .08em;
     touch-action: manipulation;
   }
+  button[data-tab="wifi"] { flex: 0 0 96px; }
   button[aria-pressed="true"] { color: #fff; border-bottom-color: #f5c518; background: #13243a; }
 </style>
 </head>
 <body>
   <button data-tab="local" aria-pressed="false">MY RECEIVER</button>
   <button data-tab="fr24" aria-pressed="false">FLIGHTRADAR24</button>
+  <button data-tab="wifi" aria-pressed="false">WI-FI</button>
 <script>
   const buttons = document.querySelectorAll('button');
   buttons.forEach((b) => b.addEventListener('click', () => window.radar.select(b.dataset.tab)));

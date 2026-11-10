@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'">
+<title>Wi-Fi</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #0b1622; color: #c9d6e3; overflow: hidden; }
+  body { font: 17px system-ui, sans-serif; user-select: none; display: flex; flex-direction: column; }
+  button { font: inherit; color: inherit; border: 0; touch-action: manipulation; }
+  [hidden] { display: none !important; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 12px; min-height: 52px; }
+  header h1 { flex: 1; margin: 0; font-size: 18px; font-weight: 600; color: #fff;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #status { padding: 0 12px 6px; min-height: 26px; font-size: 15px; color: #8fa3b8; }
+  #status.error { color: #ff8a80; }
+  .action { background: #13243a; border-radius: 8px; padding: 8px 16px; min-height: 36px; }
+  .action.primary { background: #f5c518; color: #0b1622; font-weight: 600; }
+
+  #networks { flex: 1; overflow-y: auto; margin: 0; padding: 0 12px 12px; list-style: none; }
+  #networks button { display: flex; width: 100%; align-items: center; gap: 12px; text-align: left;
+                     background: #13243a; border-radius: 8px; padding: 0 14px; min-height: 52px; margin-bottom: 6px; }
+  #networks .name { flex: 1; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #networks .meta { font-size: 14px; color: #8fa3b8; }
+  #networks .connected .meta { color: #7ddc8a; }
+
+  #entry { flex: 1; display: flex; flex-direction: column; }
+  #password { margin: 0 12px 8px; padding: 0 12px; height: 44px; line-height: 42px; border-radius: 8px;
+              background: #13243a; color: #fff; font: 20px ui-monospace, monospace;
+              white-space: pre; overflow: hidden; direction: rtl; text-align: left; }
+  #password:empty::before { content: 'Password'; color: #5d7187; font-family: system-ui, sans-serif; }
+  #keys { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 0 5px 5px; }
+  #keys .row { flex: 1; display: flex; gap: 5px; }
+  #keys button { flex: 1; min-width: 0; background: #1c3350; border-radius: 6px; font-size: 22px; color: #fff; }
+  #keys button:active { background: #2c4a70; }
+  #keys button.wide { flex: 1.6; font-size: 16px; background: #13243a; }
+  #keys button.space { flex: 5; }
+  #keys button.on { background: #f5c518; color: #0b1622; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Wi-Fi networks</h1>
+    <button class="action" id="refresh">Refresh</button>
+    <button class="action" id="cancel" hidden>Cancel</button>
+    <button class="action primary" id="join" hidden>Join</button>
+  </header>
+  <div id="status" role="status"></div>
+  <ul id="networks"></ul>
+  <div id="entry" hidden>
+    <div id="password" aria-label="Password"></div>
+    <div id="keys"></div>
+  </div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const LAYERS = {
+    abc: ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'],
+    num: ['1234567890', '@#£$%&*-+=', '!"\'():;/?'],
+    sym: ['~`|\\{}[]<>', '^_,.€', ''],
+  };
+  let layer = 'abc', shift = false, password = '', target = null, busy = false;
+
+  function setStatus(text, isError = false) {
+    $('status').textContent = text;
+    $('status').classList.toggle('error', isError);
+  }
+
+  function showList() {
+    target = null;
+    $('title').textContent = 'Wi-Fi networks';
+    for (const [id, hidden] of [['networks', false], ['refresh', false], ['entry', true], ['cancel', true], ['join', true]]) $(id).hidden = hidden;
+  }
+
+  function showEntry(network) {
+    target = network; password = ''; layer = 'abc'; shift = false;
+    $('title').textContent = network.ssid;
+    for (const [id, hidden] of [['networks', true], ['refresh', true], ['entry', false], ['cancel', false], ['join', false]]) $(id).hidden = hidden;
+    drawKeys(); drawPassword();
+  }
+
+  // Shown in the clear: on a touchscreen with no keyboard, seeing what was typed matters more than hiding it.
+  function drawPassword() {
+    $('password').textContent = password;
+    setStatus('Enter the password, then Join.'); // typing clears any earlier error
+  }
+
+  function key(label, onPress, className) {
+    const b = document.createElement('button');
+    b.textContent = label;
+    if (className) b.className = className;
+    b.addEventListener('click', onPress);
+    return b;
+  }
+
+  function drawKeys() {
+    const keys = $('keys');
+    keys.replaceChildren();
+    const type = (ch) => () => {
+      if (password.length < 63) password += ch; // WPA passwords are at most 63 characters
+      if (shift) { shift = false; drawKeys(); }
+      drawPassword();
+    };
+    LAYERS[layer].forEach((chars, i) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      if (i === 2) {
+        row.append(layer === 'abc'
+          ? key('Shift', () => { shift = !shift; drawKeys(); }, 'wide' + (shift ? ' on' : ''))
+          : key(layer === 'num' ? '#+=' : '123', () => { layer = layer === 'num' ? 'sym' : 'num'; drawKeys(); }, 'wide'));
+      }
+      for (const ch of chars) {
+        const out = layer === 'abc' && shift ? ch.toUpperCase() : ch;
+        row.append(key(out, type(out)));
+      }
+      if (i === 2) row.append(key('Delete', () => { password = password.slice(0, -1); drawPassword(); }, 'wide'));
+      keys.append(row);
+    });
+    const last = document.createElement('div');
+    last.className = 'row';
+    last.append(
+      key(layer === 'abc' ? '123' : 'ABC', () => { layer = layer === 'abc' ? 'num' : 'abc'; shift = false; drawKeys(); }, 'wide'),
+      key('space', type(' '), 'wide space'),
+    );
+    keys.append(last);
+  }
+
+  async function refresh() {
+    if (busy) return;
+    setStatus('Looking for networks…');
+    const { result, error } = await window.radar.wifiList();
+    if (target) return; // the password screen opened meanwhile; leave it alone
+    if (error) return setStatus(error, true);
+    const list = $('networks');
+    list.replaceChildren();
+    for (const network of result) {
+      const b = document.createElement('button');
+      if (network.connected) b.className = 'connected';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = network.ssid; // network names are untrusted text
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent = network.connected ? 'Connected'
+        : `${network.secured ? 'Password' : 'Open'} · signal ${network.signal}%`;
+      b.append(name, meta);
+      b.addEventListener('click', () => {
+        if (network.connected) return;
+        if (network.secured) showEntry(network); else join(network, '');
+      });
+      const li = document.createElement('li');
+      li.append(b);
+      list.append(li);
+    }
+    setStatus(result.length ? '' : 'No networks found.');
+  }
+
+  async function join(network, pass) {
+    if (busy) return;
+    busy = true;
+    setStatus(`Joining ${network.ssid}…`);
+    const { error } = await window.radar.wifiConnect(network.ssid, pass);
+    busy = false;
+    if (error) return setStatus(`Could not join: ${error}`, true);
+    showList();
+    await refresh();
+    setStatus(`Connected to ${network.ssid}.`);
+  }
+
+  $('refresh').addEventListener('click', refresh);
+  $('cancel').addEventListener('click', () => { if (!busy) { showList(); setStatus(''); } });
+  $('join').addEventListener('click', () => {
+    if (password.length < 8) return setStatus('Wi-Fi passwords are at least 8 characters.', true);
+    join(target, password);
+  });
+  window.radar.onActive((name) => { if (name === 'wifi' && !target) refresh(); });
+</script>
+</body>
+</html>
