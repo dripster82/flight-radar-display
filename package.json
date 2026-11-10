@@ -1,0 +1,13 @@
+{
+  "name": "flight-radar-display",
+  "version": "0.1.0",
+  "description": "Touchscreen flight radar: local ADS-B receiver view plus Flightradar24",
+  "private": true,
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}

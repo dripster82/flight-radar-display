@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'">
+<title>Tabs</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #0b1622; overflow: hidden; }
+  body { display: flex; font: 600 15px system-ui, sans-serif; user-select: none; }
+  button {
+    flex: 1; border: 0; border-bottom: 3px solid transparent;
+    background: none; color: #8fa3b8; font: inherit; letter-spacing: .08em;
+    touch-action: manipulation;
+  }
+  button[aria-pressed="true"] { color: #fff; border-bottom-color: #f5c518; background: #13243a; }
+</style>
+</head>
+<body>
+  <button data-tab="local" aria-pressed="false">MY RECEIVER</button>
+  <button data-tab="fr24" aria-pressed="false">FLIGHTRADAR24</button>
+<script>
+  const buttons = document.querySelectorAll('button');
+  buttons.forEach((b) => b.addEventListener('click', () => window.radar.select(b.dataset.tab)));
+  window.radar.onActive((name) =>
+    buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === name))));
+</script>
+</body>
+</html>

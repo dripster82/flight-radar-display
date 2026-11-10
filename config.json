@@ -1,0 +1,6 @@
+{
+  "localRadarUrl": "http://localhost/tar1090/",
+  "fr24Url": "https://www.flightradar24.com/",
+  "startTab": "local",
+  "kiosk": false
+}
