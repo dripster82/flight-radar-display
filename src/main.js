@@ -179,23 +179,26 @@ function setFeedRequiresGps(value) {
   return homeInfo();
 }
 
-// Gives the FR24 page a browser location so its "my location" button works: the live GPS fix
-// when there is one, otherwise the home coordinates from config. The browser has no other
-// location source, so with neither of these the button can only spin.
-function shareLocationWithFr24() {
-  const wc = tabs.fr24.view.webContents;
-  // Location is the only permission the site may have; everything else is refused.
-  wc.session.setPermissionRequestHandler((_wc, permission, allow) => allow(permission === 'geolocation'));
+// Gives both map pages a browser location: the live GPS fix when there is one, otherwise the home
+// coordinates. The browser has no other location source, so without this any page feature that
+// asks "where am I" waits forever: Flightradar24's "my location" button, and the local map's
+// Home (H) button, which asks for the location before it re-centres.
+function shareLocationWithMaps() {
+  const pages = [tabs.local.view.webContents, tabs.fr24.view.webContents];
+  // Location is the only permission these pages may have; everything else is refused.
+  for (const wc of pages) wc.session.setPermissionRequestHandler((_wc, permission, allow) => allow(permission === 'geolocation'));
   // The browser only answers a page's location request at the moment a position is set, so a
   // position set once would answer the first request and leave every later one waiting forever.
-  // Re-sending it on a timer keeps the button working and also survives page reloads.
+  // Re-sending it on a timer keeps the buttons working and also survives page reloads.
   setInterval(() => {
     const current = gpsFix || (home && { ...home, accuracy: 100 });
     if (!current) return;
-    try {
-      if (!wc.debugger.isAttached()) wc.debugger.attach();
-      wc.debugger.sendCommand('Emulation.setGeolocationOverride', current).catch(() => {});
-    } catch { /* view not ready yet; the next tick tries again */ }
+    for (const wc of pages) {
+      try {
+        if (!wc.debugger.isAttached()) wc.debugger.attach();
+        wc.debugger.sendCommand('Emulation.setGeolocationOverride', current).catch(() => {});
+      } catch { /* view not ready yet; the next tick tries again */ }
+    }
   }, LOCATION_EVERY_MS);
 }
 
@@ -271,7 +274,7 @@ app.whenReady().then(() => {
   // Nothing else starts the feeder at boot (see scripts/install-fr24.sh), so when it is not
   // waiting for GPS it is started here.
   if (!feedWaitsForGps()) feed.setRunning(true);
-  shareLocationWithFr24();
+  shareLocationWithMaps();
   setInterval(sendStatus, STATUS_EVERY_MS);
 
   win.on('resize', layout);

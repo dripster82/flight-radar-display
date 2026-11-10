@@ -1,7 +1,7 @@
 // Radar scope look for the local map. Runs INSIDE the tar1090 page (main.js injects it when the
 // "Radar scope" map style is chosen): hides the normal map, and draws coastlines and borders as a
 // green wireframe on black, with range rings and a rotating sweep. Each stretch of outline goes to
-// full brightness as the sweep passes over it, then fades to 15% before the next pass.
+// full brightness as the sweep passes over it, then fades to 5% before the next pass.
 // The sweep is decoration: the receiver hears every aircraft all the time.
 // Inputs set by main.js before this runs: window.__radarOutlines ({coast, borders} as flat
 // [lon, lat, lon, lat, ...] lines) and window.__radarConfig ({rings, ringUnit, metresPerUnit}).
@@ -11,7 +11,7 @@
 
   const SECTORS = 120;           // the circle is cut into this many slices; each slice fades on its own
   const SWEEP_SECONDS = 5;       // one full turn
-  const FADE_TO = 0.15;          // how dim the outline gets just before the sweep comes round again
+  const FADE_TO = 0.05;          // how dim the outline gets just before the sweep comes round again
   const FRAME_MS = 33;           // about 30 frames a second, to go easy on the Pi
   const GREEN = '57, 255, 122';
   const R = 6378137;             // web-mercator earth radius, metres
