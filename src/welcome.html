@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Welcome</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Shown once, over the whole screen, the first time the device is switched on (see "welcome" in config.json). */
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); }
+  body { display: grid; place-items: center; text-align: center; user-select: none; cursor: pointer; }
+  main { max-width: 34em; padding: 0 28px; }
+  svg { width: 112px; height: 112px; color: var(--accent); }
+  .sweep { transform-origin: 50px 50px; animation: turn 5s linear infinite; }
+  @keyframes turn { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .sweep { animation: none; } }
+  h1 { margin: 14px 0 8px; font-size: 30px; font-weight: 600; color: var(--strong); text-wrap: balance; }
+  p { margin: 0; font-size: 19px; line-height: 1.5; white-space: pre-line; text-wrap: pretty; }
+  small { display: block; margin-top: 22px; font-size: 15px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <main>
+    <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <circle cx="50" cy="50" r="16" opacity=".5"/><circle cx="50" cy="50" r="31" opacity=".4"/><circle cx="50" cy="50" r="46" opacity=".3"/>
+      <g class="sweep"><path d="M50 50 90 27A46 46 0 0 0 73 10Z" fill="currentColor" stroke="none" opacity=".25"/><path d="M50 50 90 27" stroke-width="2.5" stroke-linecap="round"/></g>
+      <circle cx="50" cy="50" r="2.5" fill="currentColor" stroke="none"/>
+    </svg>
+    <h1 id="title"></h1>
+    <p id="message"></p>
+    <small>Touch the screen to begin</small>
+  </main>
+<script>
+  radar.welcomeGet().then((text) => {
+    document.getElementById('title').textContent = text.title || '';
+    document.getElementById('message').textContent = text.message || '';
+  });
+  // A short wait first, so a touch that was already under way when the screen appeared does not dismiss it unread.
+  setTimeout(() => document.body.addEventListener('pointerup', () => radar.welcomeDone(), { once: true }), 1500);
+</script>
+</body>
+</html>

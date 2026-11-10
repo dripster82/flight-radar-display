@@ -23,7 +23,15 @@ const MAP_STYLES = [
   { id: 'satellite', name: 'Satellite', baseMap: 'esri' },
   { id: 'radar', name: 'Radar scope', baseMap: 'osm', extra: '&altitudeChart=0' }, // the colour bar's dark text is unreadable on black
 ];
-let settings = { brightness: 100, nightDim: true, theme: 'navy', mapStyle: 'standard' };
+// Extras the local map can show, each switched on or off in Settings. `query` is what tar1090 is
+// asked for in its address (see its README-query.md).
+const MAP_OPTIONS = [
+  // The map remembers labels being on by itself (`remembered`), so switching them off has to clear that too.
+  { id: 'labels', name: 'Labels', query: 'enableLabels', remembered: 'enableLabels' }, // callsign beside each aircraft
+  { id: 'trails', name: 'Trails', query: 'allTracks' },                       // the path each aircraft has flown
+  { id: 'large', name: 'Larger aircraft', query: 'iconScale=1.6&labelScale=1.3' },
+];
+let settings = { brightness: 100, nightDim: true, theme: 'navy', mapStyle: 'standard', mapOptions: {}, welcomeShown: false };
 
 function backlight() {
   try {
@@ -52,14 +60,18 @@ function apply() {
 }
 
 function get() {
-  return { available: Boolean(backlight()), ...settings, night: night || null, themes: THEMES, mapStyles: MAP_STYLES };
+  return { available: Boolean(backlight()), ...settings, night: night || null, themes: THEMES, mapStyles: MAP_STYLES, mapOptionList: MAP_OPTIONS };
 }
 
 function update(patch) {
   if (Number.isFinite(patch.brightness)) settings.brightness = Math.min(100, Math.max(MIN_PERCENT, Math.round(patch.brightness)));
   if (typeof patch.nightDim === 'boolean') settings.nightDim = patch.nightDim;
+  if (patch.welcomeShown === true) settings.welcomeShown = true; // set once the welcome message has been dismissed
   if (THEMES.some((theme) => theme.id === patch.theme)) settings.theme = patch.theme;
   if (MAP_STYLES.some((style) => style.id === patch.mapStyle)) settings.mapStyle = patch.mapStyle;
+  for (const { id } of MAP_OPTIONS) {
+    if (patch.mapOptions && typeof patch.mapOptions[id] === 'boolean') settings.mapOptions = { ...settings.mapOptions, [id]: patch.mapOptions[id] };
+  }
   try {
     // New file, then swapped in: a power cut leaves the old settings or the new ones, never half a file.
     fs.writeFileSync(`${settingsFile}.tmp`, JSON.stringify(settings));
@@ -75,10 +87,16 @@ function init(config, dataDir) {
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { /* first run */ }
   if (!THEMES.some((theme) => theme.id === settings.theme)) settings.theme = 'navy';
   if (!MAP_STYLES.some((style) => style.id === settings.mapStyle)) settings.mapStyle = 'standard';
+  if (!settings.mapOptions || typeof settings.mapOptions !== 'object') settings.mapOptions = {};
   apply();
   setInterval(apply, 60000); // picks up the start and end of the night hours
 }
 
 const mapStyle = () => MAP_STYLES.find((style) => style.id === settings.mapStyle);
+// What to add to the local map's address for the chosen style and the extras switched on.
+const mapQuery = () => [`baseMap=${mapStyle().baseMap}${mapStyle().extra || ''}`,
+  ...MAP_OPTIONS.filter((option) => settings.mapOptions[option.id]).map((option) => option.query)].join('&');
+// What the map itself may still remember as switched on, for extras that are switched off here.
+const mapForget = () => MAP_OPTIONS.filter((option) => option.remembered && !settings.mapOptions[option.id]).map((option) => option.remembered);
 
-module.exports = { init, get, update, isNight, mapStyle };
+module.exports = { init, get, update, isNight, mapStyle, mapQuery, mapForget };

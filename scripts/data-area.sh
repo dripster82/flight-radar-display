@@ -37,13 +37,16 @@ set -u
 
 STORE=/boot/firmware/flight-radar
 AREAS="settings:16 wifi:16 browser:64"            # name:size in MB
-[ -f /etc/flight-radar/data-area.conf ] && . /etc/flight-radar/data-area.conf   # may override STORE and AREAS
-
 ROOT=/var/lib/flight-radar-data
 DEFAULTS=/etc/flight-radar/defaults
-OWNER="$(cat /etc/flight-radar/user)"
 NM_DIR=/etc/NetworkManager/system-connections
 NOTE=/run/flight-radar-data-restored
+OWNER=
+# Written by protect.sh; may override STORE and AREAS. tests/storage-test.sh points FLIGHT_RADAR_CONF
+# at its own file, which overrides every path above so the test never touches the real storage.
+CONF="${FLIGHT_RADAR_CONF:-/etc/flight-radar/data-area.conf}"
+[ -f "$CONF" ] && . "$CONF"
+[ -n "$OWNER" ] || OWNER="$(cat /etc/flight-radar/user)"
 
 log() { echo "flight-radar-data: $*"; }
 names() { local a; for a in $AREAS; do echo "${a%%:*}"; done; }

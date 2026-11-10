@@ -23,7 +23,7 @@ if [ $# -ne 0 ] && [ $# -ne 2 ]; then echo "Usage: $0 [LATITUDE LONGITUDE]" >&2;
 
 step "System packages"
 sudo apt-get update
-sudo apt-get install -y wget unzip gpsd gpsd-clients
+sudo apt-get install -y wget unzip gpsd gpsd-clients wlr-randr plymouth plymouth-themes
 
 step "ADS-B decoder (readsb)"
 if [ ! -x /usr/bin/readsb ]; then
@@ -102,6 +102,73 @@ else
   echo "already configured"
 fi
 
+step "Touchscreen follows the rotated screen"
+# The picture is turned to landscape by scripts/kiosk.sh each time the kiosk starts. For touches to
+# land in the right place, the desktop (labwc) must be told the touchscreen belongs to that screen;
+# it then applies the same rotation to touches. Real touches are passed to the app (no mouse
+# emulation) so the maps can be pinched and dragged with fingers.
+screen="$(ls /sys/class/drm 2>/dev/null | sed -n 's/.*\(DSI-[0-9]*\)$/\1/p' | head -1 || true)"
+screen="${screen:-DSI-1}"
+labwc_config="$HOME/.config/labwc/rc.xml"
+touch_line="  <touch mapToOutput=\"$screen\" mouseEmulation=\"no\"/>"
+mkdir -p "$(dirname "$labwc_config")"
+if grep -q 'mapToOutput' "$labwc_config" 2>/dev/null; then
+  echo "already configured"
+else
+  # Start from the system's own settings when the user has none, so nothing else is lost.
+  if [ ! -f "$labwc_config" ]; then
+    if [ -f /etc/xdg/labwc/rc.xml ]; then cp /etc/xdg/labwc/rc.xml "$labwc_config"
+    else printf '<?xml version="1.0"?>\n<labwc_config>\n</labwc_config>\n' > "$labwc_config"; fi
+  fi
+  if grep -q '</labwc_config>' "$labwc_config"; then
+    sed -i "s|</labwc_config>|$touch_line\n</labwc_config>|" "$labwc_config"
+    echo "touchscreen mapped to $screen"
+  else
+    echo "WARNING: $labwc_config has an unexpected layout; add this line inside it by hand:" >&2
+    echo "$touch_line" >&2
+  fi
+fi
+
+step "Start-up screen"
+# A plain splash while the system starts, in place of scrolling text. The panel is portrait, and the
+# splash is drawn before anything can rotate the picture, so a copy of the image already turned
+# to match is used: splashRotation in config.json if set, otherwise screenRotation.
+set_splash=/usr/sbin/plymouth-set-default-theme   # not on an ordinary user's path
+if [ -x "$set_splash" ]; then
+  rotation="$(sed -n 's/.*"splashRotation": *\([0-9]*\).*/\1/p' "$REPO/config.json")"
+  [ -n "$rotation" ] || rotation="$(sed -n 's/.*"screenRotation": *\([0-9]*\).*/\1/p' "$REPO/config.json")"
+  image="$REPO/assets/splash-${rotation:-0}.png"
+  [ -f "$image" ] || image="$REPO/assets/splash-0.png"
+  splash_dir=/usr/share/plymouth/themes/flight-radar
+  if ! cmp -s "$image" "$splash_dir/splash.png" || [ "$(sudo "$set_splash")" != flight-radar ]; then
+    sudo mkdir -p "$splash_dir"
+    sudo cp "$image" "$splash_dir/splash.png"
+    printf '%s\n' '[Plymouth Theme]' 'Name=Flight Radar' 'Description=Radar splash for the flight radar display' 'ModuleName=script' '' \
+      '[script]' "ImageDir=$splash_dir" "ScriptFile=$splash_dir/flight-radar.script" | sudo tee "$splash_dir/flight-radar.plymouth" >/dev/null
+    # Fills the background with the image's own colour and shows the image centred, shrunk to fit if needed.
+    printf '%s\n' \
+      'Window.SetBackgroundTopColor(0.043, 0.086, 0.133);' \
+      'Window.SetBackgroundBottomColor(0.043, 0.086, 0.133);' \
+      'image = Image("splash.png");' \
+      'scale = Math.Min(1, Math.Min(Window.GetWidth() / image.GetWidth(), Window.GetHeight() / image.GetHeight()));' \
+      'image = image.Scale(image.GetWidth() * scale, image.GetHeight() * scale);' \
+      'sprite = Sprite(image);' \
+      'sprite.SetX(Window.GetX() + (Window.GetWidth() - image.GetWidth()) / 2);' \
+      'sprite.SetY(Window.GetY() + (Window.GetHeight() - image.GetHeight()) / 2);' | sudo tee "$splash_dir/flight-radar.script" >/dev/null
+    sudo "$set_splash" -R flight-radar   # -R rebuilds the start-up image, which takes a minute
+    echo "splash installed ($(basename "$image"))"
+  else
+    echo "already installed"
+  fi
+  if command -v raspi-config >/dev/null; then
+    sudo raspi-config nonint do_boot_splash 0   # show the splash, hide the start-up text
+    # No rainbow square before the splash.
+    grep -q '^disable_splash=1' /boot/firmware/config.txt 2>/dev/null || echo 'disable_splash=1' | sudo tee -a /boot/firmware/config.txt >/dev/null
+  fi
+else
+  echo "skipped (plymouth is not installed)"
+fi
+
 step "Kiosk on boot"
 if command -v raspi-config >/dev/null; then
   sudo raspi-config nonint do_boot_behaviour B4   # boot to desktop, logged in
@@ -117,7 +184,33 @@ else
   echo "already configured"
 fi
 
+step "One-command updates"
+# Lets scripts/update.sh carry on by itself after the restart it needs. Runs only while an update
+# is pending (the marker file exists); see scripts/update.sh.
+state_dir=/boot/firmware; [ -d "$state_dir" ] || state_dir=/var/lib
+unit="[Unit]
+Description=Continue a Flight Radar update after the restart
+ConditionPathExists=$state_dir/flight-radar-update.pending
+Wants=network-online.target
+After=network-online.target flight-radar-data.service
+
+[Service]
+Type=oneshot
+User=$(id -un)
+ExecStart=$REPO/scripts/update.sh --fetch
+
+[Install]
+WantedBy=multi-user.target"
+if [ "$(cat /etc/systemd/system/flight-radar-update.service 2>/dev/null)" != "$unit" ]; then
+  echo "$unit" | sudo tee /etc/systemd/system/flight-radar-update.service >/dev/null
+  sudo systemctl daemon-reload
+  sudo systemctl enable flight-radar-update.service
+else
+  echo "already configured"
+fi
+
 step "Done"
 echo "Local map:  http://localhost/tar1090/"
 echo "Reboot to start the kiosk:  sudo reboot"
 echo "Once everything is set up, protect it against power cuts:  scripts/protect.sh enable"
+echo "Later, to update to the latest version:  scripts/update.sh"

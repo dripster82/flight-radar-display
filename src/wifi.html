@@ -84,6 +84,9 @@
   <div id="mapStyles" class="choices">
     <span class="label">Local map</span>
   </div>
+  <div id="mapOptions" class="choices">
+    <span class="label">Map shows</span>
+  </div>
   <header>
     <h1 id="title">Wi-Fi networks</h1>
     <button class="action" id="refresh">Refresh</button>
@@ -109,7 +112,7 @@
 
   function drawDisplay() {
     $('display').hidden = !screen || !screen.available || Boolean(target);
-    for (const id of ['themes', 'mapStyles']) $(id).hidden = !screen || Boolean(target);
+    for (const id of ['themes', 'mapStyles', 'mapOptions']) $(id).hidden = !screen || Boolean(target);
     if (!screen) return;
     document.documentElement.dataset.theme = screen.theme;
     // One button per choice; the current one is highlighted.
@@ -128,6 +131,21 @@
     };
     choices('themes', screen.themes, screen.theme, 'theme');
     choices('mapStyles', screen.mapStyles, screen.mapStyle, 'mapStyle');
+    // Switches: each extra is on or off by itself.
+    if (!document.querySelector('#mapOptions button')) {
+      for (const option of screen.mapOptionList) {
+        const b = document.createElement('button');
+        b.className = 'action';
+        b.dataset.id = option.id;
+        b.textContent = option.name;
+        b.addEventListener('click', () => setDisplay({ mapOptions: { [option.id]: !screen.mapOptions[option.id] } }));
+        $('mapOptions').append(b);
+      }
+    }
+    for (const b of document.querySelectorAll('#mapOptions button')) {
+      b.classList.toggle('on', Boolean(screen.mapOptions[b.dataset.id]));
+      b.setAttribute('aria-pressed', Boolean(screen.mapOptions[b.dataset.id]));
+    }
     $('level').textContent = `${screen.brightness}%`;
     $('nightDim').textContent = screen.night ? `Dim ${screen.night.from}–${screen.night.to}: ${screen.nightDim ? 'On' : 'Off'}` : '';
     $('nightDim').hidden = !screen.night;

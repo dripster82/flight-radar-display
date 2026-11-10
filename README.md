@@ -78,9 +78,37 @@ sudo reboot
 | a backup is being written | The half-written backup is ignored (the other backup still stands) and is replaced at the next change; the area itself was not being written |
 | both of the above, on different occasions | The previous backup is used |
 
-To update or change the system later: `scripts/protect.sh disable`, reboot, make the change, then
+The storage logic has its own test, which imitates each of these power cuts and checks what is
+restored. It works in a sandbox folder, so it is safe to run on a set-up device:
+
+```sh
+sudo tests/storage-test.sh
+```
+
+## Updating
+
+```sh
+scripts/update.sh
+```
+
+One command fetches the latest version from GitHub and installs it. With power-cut protection on
+it does the whole sequence by itself: switches protection off, restarts, updates, switches
+protection back on (keeping the current settings, Wi-Fi networks and sign-in) and restarts again.
+If the new version cannot be fetched, the device is put back as it was. What happened is logged in
+`/boot/firmware/flight-radar-update.log`.
+
+To change the system by hand instead: `scripts/protect.sh disable`, reboot, make the change, then
 `scripts/protect.sh enable` again (which also re-saves the defaults). `scripts/protect.sh status`
 shows what is in force.
+
+## Start-up screen and welcome message
+
+- **Splash:** `scripts/install.sh` replaces the start-up text with a plain radar splash
+  (`assets/splash.svg`). The panel is portrait and the splash is drawn before anything can rotate
+  the picture, so a pre-turned copy is used, chosen by `splashRotation` (or `screenRotation`).
+- **Welcome message:** if `welcome` in `config.json` has a title or message, it is shown once over
+  the whole screen at the first start, and a touch dismisses it for good. To have it shown again
+  (for the last set-up before the device is wrapped): `scripts/protect.sh enable --show-welcome`.
 
 ## What is on screen
 
@@ -95,6 +123,8 @@ shows what is in force.
   replaces the map with a green wireframe of coastlines and borders on black, range rings, and a
   rotating sweep that lights each stretch of outline as it passes. The sweep is decoration: the
   receiver hears every aircraft continuously. Outline data: Natural Earth 1:50m (public domain).
+- **Map extras**: three switches in Settings (**Map shows**) add callsign labels, the trail each
+  aircraft has flown, and larger aircraft symbols to the local map.
 - **Settings**: home position (reset it to the GPS position after moving house), whether the
   feed waits for GPS, screen brightness, night dimming, and Wi-Fi (join with the on-screen keyboard,
   rejoin a saved network with one tap, or forget one).
@@ -114,6 +144,9 @@ shows what is in force.
 | `feedRequiresGps` | The starting value of the **Feed waits for GPS** switch in Settings; the switch then overrides it on the device. On: after boot the feeder stays off until five GPS fixes in a row place the device within `awayKm` of `home`, and it is stopped again if GPS places it further away. Off: the feeder starts at boot without waiting, and is still stopped if GPS shows the device is away. Turn it off if the GPS cannot get a fix where the device lives, or it will never feed. |
 | `night` | Hours during which the screen dims to `brightness` percent, when night dimming is on. |
 | `zoom` | 1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen. |
+| `screenRotation` | 90 or 270 turns the portrait Touch Display 2 to landscape (whichever way up the enclosure holds it); 0 leaves the picture alone. Applied each time the kiosk starts. |
+| `splashRotation` | Optional. The same for the start-up splash, if it comes out the other way up from the app. Re-run `scripts/install.sh` after changing it. |
+| `welcome` | `title` and `message` shown once at the first start; leave both empty for none. |
 | `kiosk` | Full screen with no window frame. |
 
 `distanceUnits` and `rangeRings` are applied by `scripts/install.sh`; re-run it on the device after changing them.

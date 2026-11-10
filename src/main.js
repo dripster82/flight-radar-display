@@ -97,8 +97,8 @@ const captureDir = app.commandLine.getSwitchValue('capture'); // dev only: save 
 // Sites treat an "Electron" user agent as an unsupported browser; present as plain Chrome.
 app.userAgentFallback = app.userAgentFallback.replace(/\s(Electron|flight-radar-display)\/\S+/g, '');
 
-// The local map's address with the chosen map style's layer added.
-const localUrl = () => `${config.localRadarUrl}${config.localRadarUrl.includes('?') ? '&' : '?'}baseMap=${display.mapStyle().baseMap}${display.mapStyle().extra || ''}`;
+// The local map's address with the chosen map style and extras (labels, trails, ...) added.
+const localUrl = () => `${config.localRadarUrl}${config.localRadarUrl.includes('?') ? '&' : '?'}${display.mapQuery()}`;
 const UNIT_METRES = { km: 1000, miles: 1609.344, nautical: 1852 };
 const UNIT_LABEL = { km: 'km', miles: 'mi', nautical: 'nmi' };
 
@@ -113,15 +113,24 @@ function addRadarScope(wc) {
   wc.executeJavaScript(`window.__radarOutlines = ${outlines}; window.__radarConfig = ${JSON.stringify(radarConfig)};\n${script}`).catch(() => {});
 }
 
+// Settings decides which extras the local map shows. The map also keeps its own memory of some of
+// them, which would otherwise bring back one that has been switched off; that memory is cleared
+// and the map loaded once more.
+function forgetMapExtras(wc) {
+  const keys = display.mapForget();
+  if (!keys.length || wc.getURL().startsWith('file:')) return;
+  wc.executeJavaScript(`(() => { let had = false; for (const key of ${JSON.stringify(keys)}) { if (localStorage.getItem(key) !== null) { localStorage.removeItem(key); had = true; } } if (had) location.reload(); })()`).catch(() => {});
+}
+
 const tabs = {
-  local: { url: config.localRadarUrl, onLoad: addRadarScope },
+  local: { url: config.localRadarUrl, onLoad: (wc) => { forgetMapExtras(wc); addRadarScope(wc); } },
   // A named persistent partition keeps the FR24 login across restarts.
   fr24: { url: config.fr24Url, partition: 'persist:fr24' },
   // Our own settings page (Wi-Fi and brightness); only pages with `file` get the preload bridge.
   wifi: { file: 'wifi.html' },
 };
 let active = tabs[config.startTab] ? config.startTab : 'local';
-let win, bar;
+let win, bar, welcomeView;
 let gpsFix = null;      // latest GPS position
 let gpsFixAt = 0;       // when it arrived
 let feedPaused = null;  // true while away from home; null until GPS has decided
@@ -131,6 +140,7 @@ const feedWaitsForGps = () => Boolean(home) && feedRequiresGps;
 
 function layout() {
   const { width, height } = win.getContentBounds();
+  if (welcomeView) welcomeView.setBounds({ x: 0, y: 0, width, height });
   bar.setBounds({ x: 0, y: 0, width, height: BAR_HEIGHT });
   for (const tab of Object.values(tabs)) {
     tab.view.setBounds({ x: 0, y: BAR_HEIGHT, width, height: height - BAR_HEIGHT });
@@ -143,6 +153,26 @@ function select(name) {
   for (const [key, tab] of Object.entries(tabs)) tab.view.setVisible(key === active);
   bar.webContents.send('active', active);
   tabs.wifi.view.webContents.send('active', active); // lets the settings page refresh when shown
+}
+
+// A message shown once over the whole screen, the first time the device is switched on: the
+// "welcome" title and message in config.json. Touching the screen dismisses it for good (the
+// choice is kept with the other settings). `scripts/protect.sh enable --show-welcome` arms it again.
+function showWelcomeOnce() {
+  const text = config.welcome || {};
+  if (!(text.title || text.message) || display.get().welcomeShown) return;
+  welcomeView = new WebContentsView({ webPreferences: { preload: PRELOAD } });
+  win.contentView.addChildView(welcomeView); // added last, so it sits above the tabs
+  welcomeView.webContents.on('did-finish-load', () => welcomeView.webContents.setZoomFactor(ZOOM));
+  welcomeView.webContents.loadFile(path.join(__dirname, 'welcome.html'));
+  ipcMain.handle('welcome:get', () => ({ title: String(text.title || ''), message: String(text.message || '') }));
+  ipcMain.once('welcome:done', () => {
+    win.contentView.removeChildView(welcomeView);
+    welcomeView.webContents.close();
+    welcomeView = null;
+    display.update({ welcomeShown: true });
+    requestBackup('settings');
+  });
 }
 
 function createTab(tab) {
@@ -312,6 +342,7 @@ app.whenReady().then(() => {
 
   tabs.local.url = localUrl(); // needs the saved map style, which display.init has just loaded
   Object.values(tabs).forEach(createTab);
+  showWelcomeOnce();
   layout();
   select(active);
 
@@ -343,11 +374,11 @@ app.whenReady().then(() => {
   ipcMain.handle('home:feedWait', (_e, value) => setFeedRequiresGps(value));
   ipcMain.handle('display:get', () => ({ ...display.get(), storageRestored: storageRestored() }));
   ipcMain.handle('display:set', (_e, patch) => {
-    const before = display.mapStyle().id;
+    const before = localUrl();
     const result = display.update(patch || {});
     requestBackup('settings');
     bar.webContents.send('theme', result.theme); // the settings page restyles itself; the tab bar is told here
-    if (result.mapStyle !== before) { // reload the local map in its new style
+    if (localUrl() !== before) { // reload the local map with its new style or extras
       tabs.local.url = localUrl();
       tabs.local.load();
     }

@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('radar', {
   homeFeedWait: (value) => ipcRenderer.invoke('home:feedWait', value),
   displayGet: () => ipcRenderer.invoke('display:get'),
   displaySet: (patch) => ipcRenderer.invoke('display:set', patch),
+  welcomeGet: () => ipcRenderer.invoke('welcome:get'),
+  welcomeDone: () => ipcRenderer.send('welcome:done'),
 });
 
 // The colour theme is set on <html> before the page draws, and updated live when it is changed in Settings.

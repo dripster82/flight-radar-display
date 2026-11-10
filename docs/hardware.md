@@ -36,6 +36,8 @@ enclosure.
    SMA bulkhead extension can be used without drilling.
 2. **Fan and display both want GPIO power.** Each takes a 5V and a ground pin. The Pi has two 5V
    pins, so both can be connected, but check the display's power cable leaves the second one free.
-3. **Screen rotation and touch on the Pi.** Landscape rotation has to be set in software and the
-   touch input rotated to match. Not yet set up in `scripts/install.sh`.
+3. **Screen rotation and touch on the Pi.** The picture is turned to landscape each time the kiosk
+   starts (`screenRotation` in `config.json`: 90 or 270), and `scripts/install.sh` maps the
+   touchscreen to the screen so touches rotate with it. Written from the documentation; not yet
+   tried on the real screen. See `docs/hardware-day.md`.
 4. **Stock.** The screen was sold out at The Pi Hut on 10 November; check other UK resellers.

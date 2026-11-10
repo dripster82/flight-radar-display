@@ -6,6 +6,10 @@
 #                                the defaults, creates the writable storage areas and their
 #                                backups, and makes the rest of the system read-only. Takes effect
 #                                after a reboot.
+#   scripts/protect.sh enable --show-welcome
+#                                The same, and the welcome message (see "welcome" in config.json)
+#                                will be shown again at the next start. Use this for the last
+#                                "enable" before the device is wrapped.
 #   scripts/protect.sh disable   Makes the system writable again (for updates or changes), after a
 #                                reboot. Run "enable" again afterwards; that also re-saves the defaults.
 #   scripts/protect.sh status    Shows what is currently in force.
@@ -50,6 +54,10 @@ save_defaults() {
       sudo tar -C "$ETC/defaults/browser" -xf -
   fi
   sudo chmod 700 "$ETC/defaults/wifi"
+  if [ "${1:-}" = --show-welcome ] && sudo test -f "$ETC/defaults/settings/display.json"; then
+    sudo python3 -c 'import json, sys; f = sys.argv[1]; d = json.load(open(f)); d["welcomeShown"] = False; json.dump(d, open(f, "w"))' "$ETC/defaults/settings/display.json"
+    echo "  the welcome message will be shown at the next start"
+  fi
   echo "  $(sudo du -sh "$ETC/defaults" | cut -f1) saved in $ETC/defaults"
 }
 
@@ -63,14 +71,17 @@ case "${1:-}" in
     id -un | sudo tee "$ETC/user" >/dev/null
 
     # Where the storage lives: a folder on the boot partition, unless told otherwise (for testing).
-    store="${FLIGHT_RADAR_STORE:-/boot/firmware/flight-radar}"
-    areas="${FLIGHT_RADAR_AREAS:-settings:16 wifi:16 browser:64}"   # name:size in MB
+    # Switching it back on (after an update, say) keeps the place and sizes chosen the first time.
+    STORE=; AREAS=
+    [ -f "$ETC/data-area.conf" ] && . "$ETC/data-area.conf"
+    store="${FLIGHT_RADAR_STORE:-${STORE:-/boot/firmware/flight-radar}}"
+    areas="${FLIGHT_RADAR_AREAS:-${AREAS:-settings:16 wifi:16 browser:64}}"   # name:size in MB
     store_parent="$(dirname "$store")"
     [ -d "$store_parent" ] || { echo "$store_parent does not exist; set FLIGHT_RADAR_STORE to a folder on a partition that stays writable." >&2; exit 1; }
     need_mb=0
     for area in $areas; do need_mb=$((need_mb + ${area##*:} * 3)); done   # each area plus its two backups
     sudo systemctl stop flight-radar-data.service 2>/dev/null || true   # frees any earlier storage before measuring
-    save_defaults
+    save_defaults "${2:-}"
     sudo rm -rf "$store"
     free_mb="$(df -Pm "$store_parent" | awk 'NR==2 {print $4}')"
     if [ "$free_mb" -lt $((need_mb + 10)) ]; then
