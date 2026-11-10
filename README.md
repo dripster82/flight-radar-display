@@ -37,12 +37,27 @@ and emails the account holder:
 scripts/install-fr24.sh
 ```
 
-## Settings
+## What is on screen
 
-`config.json`: the two URLs, which tab opens first (`local` or `fr24`), `kiosk`, `home`, and
-`zoom` (1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen).
-`LOCAL_RADAR_URL`, `KIOSK=1` and `HOME_LOCATION=lat,lon` override it from the environment.
+- **My Receiver / Flightradar24** tabs. Tapping the tab you are on returns it to its home view.
+- **Status lights**: RX (receiver, with aircraft count), FEED (Flightradar24 upload), GPS, and
+  Wi-Fi on the Settings button. Green is working, red is not, amber means the feed is paused
+  because the device is away from home, grey means that service is not present.
+- **Settings**: screen brightness, night dimming, and Wi-Fi (join with the on-screen keyboard,
+  rejoin a saved network with one tap, or forget one).
 
-`home` is what Flightradar24's "my location" button uses when there is no GPS fix, for example
-`"home": { "latitude": 51.5, "longitude": -0.1 }`. With no GPS and no `home`, that button
-cannot work: the browser has no other way to know where it is.
+## Settings file
+
+`config.json`:
+
+| Key | Meaning |
+|---|---|
+| `localRadarUrl`, `fr24Url` | The two pages. The local map hides its sidebar and centres on the receiver. |
+| `startTab` | `local` or `fr24`. |
+| `home` | Home coordinates. Used for FR24's "my location" button when there is no GPS fix, and to decide when the device is away. With no GPS and no `home`, that button cannot work. |
+| `awayKm` | Further than this from `home` (by GPS), the Flightradar24 feeder is stopped; it restarts when back. The feeder is registered at a fixed location, so it should not upload from elsewhere. |
+| `night` | Hours during which the screen dims to `brightness` percent, when night dimming is on. |
+| `zoom` | 1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen. |
+| `kiosk` | Full screen with no window frame. |
+
+`LOCAL_RADAR_URL`, `KIOSK=1` and `HOME_LOCATION=lat,lon` override the file from the environment.

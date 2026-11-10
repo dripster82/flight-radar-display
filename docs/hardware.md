@@ -10,7 +10,7 @@ Updated 10 November 2026. Target: finished by 10 December 2026.
 | Cooling | [Cooling Kit for Raspberry Pi 4](https://thepihut.com/products/cooling-kit-for-raspberry-pi-4) (heatsinks + optional 5V fan) | £4.00 | 10 Nov, in stock |
 | ADS-B receiver | Nooelec NESDR SMArt v5 | £41.95 | Not rechecked |
 | Antenna | NooElec ADS-B Discovery 3dBi bundle (1090 MHz) | £16.72 | Not rechecked |
-| Antenna extension | Boobrie 15cm SMA bulkhead cables, pack of 2 | £6.95 | Not rechecked — may no longer be needed, see below |
+| Antenna extension | Boobrie 15cm SMA bulkhead cables, pack of 2 | £6.95 | Not rechecked |
 | GPS | Stemedu VK-172 USB GPS/GLONASS | £13.90 | Not rechecked |
 | **Subtotal** | | **£231.42** | |
 
@@ -27,18 +27,13 @@ enclosure.
 - **Connection:** one DSI ribbon cable plus power from the Pi's GPIO pins. No separate supply.
 - **Mounting:** the Pi screws to the back of the display; the enclosure wraps both.
 
-## Open questions with these parts
+## Notes and open questions
 
-1. **Where the receiver, GPS and antenna go.** The enclosure holds only the screen and the Pi.
-   The SDR and GPS are USB sticks, so they will stick out of the Pi's USB ports at the side unless
-   put on short USB extension leads behind the unit. There is no panel to mount the SMA bulkhead
-   connector on without drilling the enclosure, so the antenna either screws straight onto the SDR
-   or the enclosure is modified.
-2. **Whether the cooling kit's fan fits.** The enclosure listing says add-ons over about 20mm tall
-   are blocked by the display's standoffs. The heatsinks alone should be fine; the fan on top of the
-   large heatsink needs measuring.
-3. **Fan and display both want GPIO power.** Each takes a 5V and a ground pin. The Pi has two 5V
+1. **Fit is confirmed** (checked by Paul, 10 November): the receiver and GPS sticks and the
+   cooling kit fit inside the enclosure, and its cable port holes take the antenna cable, so the
+   SMA bulkhead extension can be used without drilling.
+2. **Fan and display both want GPIO power.** Each takes a 5V and a ground pin. The Pi has two 5V
    pins, so both can be connected, but check the display's power cable leaves the second one free.
-4. **Screen rotation and touch on the Pi.** Landscape rotation has to be set in software and the
+3. **Screen rotation and touch on the Pi.** Landscape rotation has to be set in software and the
    touch input rotated to match. Not yet set up in `scripts/install.sh`.
-5. **Stock.** The screen was sold out at The Pi Hut on 10 November; check other UK resellers.
+4. **Stock.** The screen was sold out at The Pi Hut on 10 November; check other UK resellers.

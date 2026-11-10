@@ -1,8 +1,10 @@
 {
-  "localRadarUrl": "http://localhost/tar1090/",
+  "localRadarUrl": "http://localhost/tar1090/?hideSideBar&centerReceiver",
   "fr24Url": "https://www.flightradar24.com/",
   "startTab": "local",
   "home": { "latitude": 53.9583, "longitude": -1.0803 },
+  "awayKm": 25,
+  "night": { "from": "22:00", "to": "07:00", "brightness": 15 },
   "zoom": 1.5,
   "kiosk": false
 }

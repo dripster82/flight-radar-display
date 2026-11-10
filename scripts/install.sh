@@ -68,9 +68,24 @@ else
   echo "already installed"
 fi
 
+step "Screen brightness control"
+# Lets the app (running as the desktop user) set the display backlight.
+rule='ACTION=="add", SUBSYSTEM=="backlight", RUN+="/bin/chmod 0666 /sys/class/backlight/%k/brightness"'
+if [ "$(cat /etc/udev/rules.d/90-backlight.rules 2>/dev/null)" != "$rule" ]; then
+  echo "$rule" | sudo tee /etc/udev/rules.d/90-backlight.rules >/dev/null
+  sudo udevadm control --reload
+  sudo udevadm trigger --subsystem-match=backlight --action=add
+else
+  echo "already configured"
+fi
+
 step "Kiosk on boot"
-sudo raspi-config nonint do_boot_behaviour B4   # boot to desktop, logged in
-sudo raspi-config nonint do_blanking 1          # never blank the screen
+if command -v raspi-config >/dev/null; then
+  sudo raspi-config nonint do_boot_behaviour B4   # boot to desktop, logged in
+  sudo raspi-config nonint do_blanking 1          # never blank the screen
+else
+  echo "raspi-config not found (not Raspberry Pi OS): skipping autologin and screen-blanking settings"
+fi
 autostart="$HOME/.config/labwc/autostart"
 mkdir -p "$(dirname "$autostart")"
 if ! grep -qF "$REPO/scripts/kiosk.sh" "$autostart" 2>/dev/null; then

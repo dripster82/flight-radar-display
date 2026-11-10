@@ -10,21 +10,51 @@
   button {
     flex: 1; border: 0; border-bottom: 3px solid transparent;
     background: none; color: #8fa3b8; font: inherit; letter-spacing: .08em;
-    touch-action: manipulation;
+    touch-action: manipulation; white-space: nowrap;
   }
-  button[data-tab="wifi"] { flex: 0 0 96px; }
+  button[data-tab="wifi"] { flex: 0 0 130px; }
   button[aria-pressed="true"] { color: #fff; border-bottom-color: #f5c518; background: #13243a; }
+
+  #status { display: flex; align-items: center; gap: 14px; padding: 0 14px; font-size: 12px; color: #8fa3b8; letter-spacing: .06em; }
+  .light { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .light::before, button[data-state]::before {
+    content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+  }
+  [data-state]::before { background: #4a5c70; }
+  button[data-state]::before { margin-right: 7px; }
+  [data-state="ok"]::before { background: #4cd964; }
+  [data-state="bad"]::before { background: #ff5b4f; }
+  [data-state="paused"]::before { background: #f5a623; }
 </style>
 </head>
 <body>
   <button data-tab="local" aria-pressed="false">MY RECEIVER</button>
   <button data-tab="fr24" aria-pressed="false">FLIGHTRADAR24</button>
-  <button data-tab="wifi" aria-pressed="false">WI-FI</button>
+  <div id="status">
+    <span class="light" id="receiver" data-state="off">RX</span>
+    <span class="light" id="feed" data-state="off">FEED</span>
+    <span class="light" id="gps" data-state="off">GPS</span>
+  </div>
+  <button data-tab="wifi" data-state="off" aria-pressed="false">SETTINGS</button>
 <script>
   const buttons = document.querySelectorAll('button');
   buttons.forEach((b) => b.addEventListener('click', () => window.radar.select(b.dataset.tab)));
   window.radar.onActive((name) =>
     buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === name))));
+
+  // Green = working, red = not working, amber = paused on purpose, grey = not present on this machine.
+  const MEANING = { ok: 'working', bad: 'not working', paused: 'paused while away from home', off: 'not running' };
+  function light(el, name, status, text) {
+    el.dataset.state = status.state;
+    el.setAttribute('aria-label', `${name}: ${MEANING[status.state]}`);
+    if (text) el.textContent = text;
+  }
+  window.radar.onStatus((s) => {
+    light(document.getElementById('receiver'), 'Receiver', s.receiver, s.receiver.state === 'ok' ? `RX ${s.receiver.count}` : 'RX');
+    light(document.getElementById('feed'), 'Flightradar24 feed', s.feed);
+    light(document.getElementById('gps'), 'GPS', s.gps);
+    light(document.querySelector('[data-tab=wifi]'), 'Wi-Fi', s.wifi);
+  });
 </script>
 </body>
 </html>
