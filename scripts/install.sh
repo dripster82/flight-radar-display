@@ -173,6 +173,8 @@ step "Kiosk on boot"
 if command -v raspi-config >/dev/null; then
   sudo raspi-config nonint do_boot_behaviour B4   # boot to desktop, logged in
   sudo raspi-config nonint do_blanking 1          # never blank the screen
+  # The app has its own on-screen keyboards, so the system's is switched off (two would appear).
+  sudo raspi-config nonint do_squeekboard S3 2>/dev/null || echo "note: could not switch off the system on-screen keyboard"
 else
   echo "raspi-config not found (not Raspberry Pi OS): skipping autologin and screen-blanking settings"
 fi

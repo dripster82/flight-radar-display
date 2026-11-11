@@ -79,7 +79,10 @@ sudo reboot
 |---|---|---|---|
 | Join a network from the touchscreen | Settings > Wi-Fi: pick one, type the password | "Connected" | `nmcli device wifi list` over SSH |
 | Forget a network | Settings > Wi-Fi > Forget | It leaves the list | — |
-| Flightradar24 loads and signs in | Flightradar24 tab; tap the sign-in boxes | The site loads and an on-screen keyboard appears for typing | **Unknown until tried.** The app's own keyboard is only on the Settings screen. If none appears, plug in a USB keyboard for this one-off sign-in, and tell Claude so one can be added |
+| Flightradar24 loads and signs in | Flightradar24 tab; touch the e-mail box | The app's keyboard slides up under the page; typing, Enter and Hide work; sign-in succeeds | No keyboard: tell Claude which box (it may be inside a frame from another site). Meanwhile a USB keyboard works |
+| Only one keyboard appears | Same | Just the app's keyboard, not a second one from the system | Two keyboards: `sudo raspi-config nonint do_squeekboard S3` (the system one off) and reboot |
+| Home button | On the Flightradar24 tab, follow a link away from the site, then touch the house beside the tabs | Back at the Flightradar24 start page | — |
+| Sign out and start again | Settings > Flightradar24, tap twice | Flightradar24 opens signed out | — |
 | The sign-in survives a restart | `sudo reboot` | Still signed in | Check the app's data folder is writable |
 | "My location" on Flightradar24 | Tap its location button | Centres on the GPS (or home) position | — |
 

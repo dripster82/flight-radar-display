@@ -92,6 +92,8 @@ const STATUS_EVERY_MS = 5000;
 const GPS_FRESH_MS = 15000;
 const FIXES_TO_TRUST = 5; // consecutive GPS fixes that must agree before the feeder is started or stopped
 const PRELOAD = path.join(__dirname, 'preload.js');
+const WEB_PRELOAD = path.join(__dirname, 'web-preload.js'); // for the web pages in the map tabs; see that file
+const KEYBOARD_HEIGHT = Math.round(206 * ZOOM);
 const captureDir = app.commandLine.getSwitchValue('capture'); // dev only: save a PNG of each tab, then quit
 
 // Sites treat an "Electron" user agent as an unsupported browser; present as plain Chrome.
@@ -130,7 +132,8 @@ const tabs = {
   wifi: { file: 'wifi.html' },
 };
 let active = tabs[config.startTab] ? config.startTab : 'local';
-let win, bar, welcomeView;
+let win, bar, welcomeView, keyboardView;
+let typingInto = null;  // the web page the on-screen keyboard is typing into, while it is shown
 let gpsFix = null;      // latest GPS position
 let gpsFixAt = 0;       // when it arrived
 let feedPaused = null;  // true while away from home; null until GPS has decided
@@ -142,13 +145,47 @@ function layout() {
   const { width, height } = win.getContentBounds();
   if (welcomeView) welcomeView.setBounds({ x: 0, y: 0, width, height });
   bar.setBounds({ x: 0, y: 0, width, height: BAR_HEIGHT });
+  // While the keyboard is up, the page being typed into is made shorter so nothing hides behind it.
   for (const tab of Object.values(tabs)) {
-    tab.view.setBounds({ x: 0, y: BAR_HEIGHT, width, height: height - BAR_HEIGHT });
+    const keyboard = typingInto === tab.view.webContents ? KEYBOARD_HEIGHT : 0;
+    tab.view.setBounds({ x: 0, y: BAR_HEIGHT, width, height: height - BAR_HEIGHT - keyboard });
+  }
+  keyboardView.setBounds({ x: 0, y: height - KEYBOARD_HEIGHT, width, height: KEYBOARD_HEIGHT });
+}
+
+// The on-screen keyboard for web pages. There is no physical keyboard, so without this nothing
+// could be typed into the Flightradar24 sign-in or its search box. A page says when one of its text
+// boxes is touched (web-preload.js); the keyboard is docked under it, and each key pressed
+// (keyboard.html) is typed into that page as if from a real keyboard.
+function showKeyboard(wc) {
+  const tab = tabs[active];
+  if (tab.file || wc !== tab.view.webContents || typingInto === wc) return; // only the page on screen
+  typingInto = wc;
+  keyboardView.setVisible(true);
+  layout();
+}
+function hideKeyboard() {
+  if (!typingInto) return;
+  typingInto = null;
+  keyboardView.setVisible(false);
+  layout();
+}
+function typeKey({ text, key } = {}) {
+  if (!typingInto) return;
+  if (key === 'hide') return hideKeyboard();
+  typingInto.focus(); // touching the key took focus away from the page; give it back before typing
+  if (typeof text === 'string' && text.length === 1) {
+    typingInto.sendInputEvent({ type: 'char', keyCode: text });
+  } else if (key === 'Backspace' || key === 'Enter') {
+    typingInto.sendInputEvent({ type: 'keyDown', keyCode: key });
+    if (key === 'Enter') typingInto.sendInputEvent({ type: 'char', keyCode: '\r' });
+    typingInto.sendInputEvent({ type: 'keyUp', keyCode: key });
   }
 }
 
 function select(name) {
   if (!tabs[name]) return;
+  hideKeyboard();
   active = name;
   for (const [key, tab] of Object.entries(tabs)) tab.view.setVisible(key === active);
   bar.webContents.send('active', active);
@@ -176,7 +213,10 @@ function showWelcomeOnce() {
 }
 
 function createTab(tab) {
-  const webPreferences = tab.file ? { preload: PRELOAD } : tab.partition ? { partition: tab.partition } : {};
+  // Our own pages get the app's bridge. Web pages get only the keyboard watcher, in their frames too
+  // (a sign-in form is often inside one).
+  const webPreferences = tab.file ? { preload: PRELOAD }
+    : { preload: WEB_PRELOAD, nodeIntegrationInSubFrames: true, ...(tab.partition ? { partition: tab.partition } : {}) };
   tab.view = new WebContentsView({ webPreferences });
   const wc = tab.view.webContents;
   wc.on('did-finish-load', () => {
@@ -186,6 +226,7 @@ function createTab(tab) {
   tab.load = () => (tab.file
     ? wc.loadFile(path.join(__dirname, tab.file))
     : wc.loadURL(tab.url).catch(() => {})); // failures are handled by did-fail-load
+  wc.on('did-start-navigation', (details) => { if (details.isMainFrame && !details.isSameDocument && typingInto === wc) hideKeyboard(); });
   // There is no way back from a popup on a kiosk, so open links in place instead.
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   // If a site cannot load (receiver still starting, no network), show a notice and keep retrying.
@@ -342,6 +383,11 @@ app.whenReady().then(() => {
 
   tabs.local.url = localUrl(); // needs the saved map style, which display.init has just loaded
   Object.values(tabs).forEach(createTab);
+  keyboardView = new WebContentsView({ webPreferences: { preload: PRELOAD } });
+  keyboardView.webContents.on('did-finish-load', () => keyboardView.webContents.setZoomFactor(ZOOM));
+  keyboardView.webContents.loadFile(path.join(__dirname, 'keyboard.html'));
+  keyboardView.setVisible(false);
+  win.contentView.addChildView(keyboardView);
   showWelcomeOnce();
   layout();
   select(active);
@@ -362,6 +408,23 @@ app.whenReady().then(() => {
     // Tapping the tab you are already on takes it back to its home page.
     if (name === active && tabs[name]) tabs[name].load();
     select(name);
+  });
+  ipcMain.on('keyboard:show', (event) => showKeyboard(event.sender));
+  ipcMain.on('keyboard:hide', (event) => { if (event.sender === typingInto) hideKeyboard(); });
+  ipcMain.on('keyboard:key', (event, key) => { if (event.sender === keyboardView.webContents) typeKey(key); });
+  // The way out when a map tab is stuck on a sign-in page or has wandered off to another site:
+  // back to that tab's start page (the home button on the tab bar, and a button in Settings).
+  ipcMain.on('tab:home', (_e, name) => {
+    if (!tabs[name] || tabs[name].file) return;
+    tabs[name].load();
+    select(name);
+  });
+  // And the stronger version for Flightradar24: forget the sign-in and everything else the site
+  // has stored, then start again from its front page.
+  ipcMain.on('fr24:signOut', async () => {
+    await session.fromPartition(tabs.fr24.partition).clearStorageData().catch(() => {});
+    tabs.fr24.load();
+    select('fr24');
   });
   // Errors come back as { error } so the page can show the message as plain text.
   const reply = (work) => work.then((result) => ({ result }), (err) => ({ error: err.message }));

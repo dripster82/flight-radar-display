@@ -45,22 +45,16 @@
   #home .action { white-space: nowrap; }
 
   #entry { flex: 1; display: flex; flex-direction: column; }
+  #keys { padding: 0 5px 5px; }
   #password { margin: 0 12px 8px; padding: 0 12px; height: 44px; line-height: 42px; border-radius: 8px;
               background: var(--panel); color: var(--strong); font: 20px ui-monospace, monospace;
               white-space: pre; overflow: hidden; direction: rtl; text-align: left; }
   #password:empty::before { content: 'Password'; color: var(--muted); font-family: var(--font); }
-  #keys { flex: 1; display: flex; flex-direction: column; gap: 5px; padding: 0 5px 5px; }
-  #keys .row { flex: 1; display: flex; gap: 5px; }
-  #keys button { flex: 1; min-width: 0; background: var(--key); border-radius: 6px; font-size: 22px; color: var(--strong); }
-  #keys button:active { background: var(--key-active); }
-  #keys button.wide { flex: 1.6; font-size: 16px; background: var(--panel); }
-  #keys button.space { flex: 5; }
-  #keys button.on { background: var(--accent); color: var(--accent-text); }
-
   #restored { white-space: pre-line; margin: 8px 12px 0; padding: 10px 12px; border-radius: 8px; background: var(--danger); color: #ffffff; font-size: 15px; }
   .choices { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
   .choices .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
   .choices .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .choices .action.confirm { background: var(--danger); color: #ffffff; }
 </style>
 </head>
 <body>
@@ -87,6 +81,11 @@
   <div id="mapOptions" class="choices">
     <span class="label">Map shows</span>
   </div>
+  <div id="fr24" class="choices">
+    <span class="label">Flightradar24</span>
+    <button class="action" id="fr24Home">Back to start page</button>
+    <button class="action" id="fr24SignOut">Sign out and start again</button>
+  </div>
   <header>
     <h1 id="title">Wi-Fi networks</h1>
     <button class="action" id="refresh">Refresh</button>
@@ -100,19 +99,15 @@
     <div id="keys"></div>
   </div>
 
+<script src="keys.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
-  const LAYERS = {
-    abc: ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'],
-    num: ['1234567890', '@#£$%&*-+=', '!"\'():;/?'],
-    sym: ['~`|\\{}[]<>', '^_,.€', ''],
-  };
-  let layer = 'abc', shift = false, password = '', target = null, busy = false;
+  let password = '', target = null, busy = false;
   let screen = null; // brightness settings; stays null where the backlight cannot be controlled
 
   function drawDisplay() {
     $('display').hidden = !screen || !screen.available || Boolean(target);
-    for (const id of ['themes', 'mapStyles', 'mapOptions']) $(id).hidden = !screen || Boolean(target);
+    for (const id of ['themes', 'mapStyles', 'mapOptions', 'fr24']) $(id).hidden = !screen || Boolean(target);
     if (!screen) return;
     document.documentElement.dataset.theme = screen.theme;
     // One button per choice; the current one is highlighted.
@@ -185,57 +180,22 @@
   }
 
   function showEntry(network) {
-    target = network; password = ''; layer = 'abc'; shift = false;
+    target = network; password = '';
     $('title').textContent = network.ssid;
     for (const [id, hidden] of [['networks', true], ['refresh', true], ['entry', false], ['cancel', false], ['join', false]]) $(id).hidden = hidden;
     $('home').hidden = true;
-    drawKeys(); drawPassword(); drawDisplay();
+    keyboard.reset(); drawPassword(); drawDisplay();
   }
+
+  const keyboard = onScreenKeyboard($('keys'), {
+    onType: (ch) => { if (password.length < 63) password += ch; drawPassword(); }, // WPA passwords are at most 63 characters
+    onDelete: () => { password = password.slice(0, -1); drawPassword(); },
+  });
 
   // Shown in the clear: on a touchscreen with no keyboard, seeing what was typed matters more than hiding it.
   function drawPassword() {
     $('password').textContent = password;
     setStatus('Enter the password, then Join.'); // typing clears any earlier error
-  }
-
-  function key(label, onPress, className) {
-    const b = document.createElement('button');
-    b.textContent = label;
-    if (className) b.className = className;
-    b.addEventListener('click', onPress);
-    return b;
-  }
-
-  function drawKeys() {
-    const keys = $('keys');
-    keys.replaceChildren();
-    const type = (ch) => () => {
-      if (password.length < 63) password += ch; // WPA passwords are at most 63 characters
-      if (shift) { shift = false; drawKeys(); }
-      drawPassword();
-    };
-    LAYERS[layer].forEach((chars, i) => {
-      const row = document.createElement('div');
-      row.className = 'row';
-      if (i === 2) {
-        row.append(layer === 'abc'
-          ? key('Shift', () => { shift = !shift; drawKeys(); }, 'wide' + (shift ? ' on' : ''))
-          : key(layer === 'num' ? '#+=' : '123', () => { layer = layer === 'num' ? 'sym' : 'num'; drawKeys(); }, 'wide'));
-      }
-      for (const ch of chars) {
-        const out = layer === 'abc' && shift ? ch.toUpperCase() : ch;
-        row.append(key(out, type(out)));
-      }
-      if (i === 2) row.append(key('Delete', () => { password = password.slice(0, -1); drawPassword(); }, 'wide'));
-      keys.append(row);
-    });
-    const last = document.createElement('div');
-    last.className = 'row';
-    last.append(
-      key(layer === 'abc' ? '123' : 'ABC', () => { layer = layer === 'abc' ? 'num' : 'abc'; shift = false; drawKeys(); }, 'wide'),
-      key('space', type(' '), 'wide space'),
-    );
-    keys.append(last);
   }
 
   async function refresh() {
@@ -327,6 +287,20 @@
     const { result, error } = await window.radar.homeSet();
     if (error) return drawHome(await window.radar.homeGet(), error);
     drawHome(result, result.receiverUpdated ? 'Home updated to the GPS position.' : 'Home updated, but the receiver\'s own location could not be changed.');
+  });
+  // For when the Flightradar24 tab is stuck (a sign-in page that will not go away, or a page outside
+  // Flightradar24). Both take you to that tab. Signing out needs a second tap: it throws away the sign-in.
+  $('fr24Home').addEventListener('click', () => window.radar.tabHome('fr24'));
+  let signOutConfirm = null;
+  const endSignOutConfirm = () => { clearTimeout(signOutConfirm); signOutConfirm = null; $('fr24SignOut').classList.remove('confirm'); $('fr24SignOut').textContent = 'Sign out and start again'; };
+  $('fr24SignOut').addEventListener('click', () => {
+    if (!signOutConfirm) {
+      $('fr24SignOut').classList.add('confirm'); $('fr24SignOut').textContent = 'Tap again to sign out';
+      signOutConfirm = setTimeout(endSignOutConfirm, 4000);
+      return;
+    }
+    endSignOutConfirm();
+    window.radar.fr24SignOut();
   });
   $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
   refreshHome();

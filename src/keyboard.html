@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'">
+<title>Keyboard</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Docked along the bottom of the screen while a text box on a web page is being typed into. */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden; }
+  body { display: flex; font: 17px var(--font); user-select: none; border-top: 1px solid var(--line); }
+  button { font: inherit; color: inherit; border: 0; touch-action: manipulation; }
+  #keys { padding: 5px; }
+</style>
+</head>
+<body>
+  <div id="keys"></div>
+<script src="keys.js"></script>
+<script>
+  // Each key is passed to the app, which types it into the web page (see main.js).
+  onScreenKeyboard(document.getElementById('keys'), {
+    onType: (text) => window.radar.keyboardKey({ text }),
+    onDelete: () => window.radar.keyboardKey({ key: 'Backspace' }),
+    extraKeys: [
+      { label: 'Enter', className: 'on', onPress: () => window.radar.keyboardKey({ key: 'Enter' }) },
+      { label: 'Hide', onPress: () => window.radar.keyboardKey({ key: 'hide' }) },
+    ],
+  });
+</script>
+</body>
+</html>

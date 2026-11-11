@@ -113,6 +113,13 @@ shows what is in force.
 ## What is on screen
 
 - **My Receiver / Flightradar24** tabs. Tapping the tab you are on returns it to its home view.
+- **Home button** (the house, beside the tabs): takes the map tab you are on back to its start
+  page. This is the way out if Flightradar24 is stuck on a sign-in page or has wandered off to
+  another site. Settings has the same button for Flightradar24, plus **Sign out and start again**,
+  which also forgets the sign-in and everything else the site has stored.
+- **On-screen keyboard for web pages**: touching a text box on either map tab (the Flightradar24
+  sign-in or its search box, say) brings up a keyboard under the page; the page shrinks to make
+  room. **Enter** submits, **Hide** puts it away, and touching the box again brings it back.
 - **Status lights**: RX (receiver, with aircraft count), FEED (Flightradar24 upload), GPS, and
   Wi-Fi on the Settings button. Green is working, red is not, amber means the feed is being held back
   (waiting for a GPS fix at home, or paused because the device is away), grey means that service

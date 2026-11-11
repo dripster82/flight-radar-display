@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('radar', {
   homeFeedWait: (value) => ipcRenderer.invoke('home:feedWait', value),
   displayGet: () => ipcRenderer.invoke('display:get'),
   displaySet: (patch) => ipcRenderer.invoke('display:set', patch),
+  keyboardKey: (key) => ipcRenderer.send('keyboard:key', key),
+  tabHome: (name) => ipcRenderer.send('tab:home', name),
+  fr24SignOut: () => ipcRenderer.send('fr24:signOut'),
   welcomeGet: () => ipcRenderer.invoke('welcome:get'),
   welcomeDone: () => ipcRenderer.send('welcome:done'),
 });

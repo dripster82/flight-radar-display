@@ -30,3 +30,12 @@
   --ok: #7dff9a; --warn: #ffffff; --idle: #6b5520;
   --font: ui-monospace, Menlo, monospace;
 }
+
+/* The on-screen keyboard (keys.js), on the Settings page and under web pages. */
+.keyboard { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.keyboard .row { flex: 1; display: flex; gap: 5px; }
+.keyboard button { flex: 1; min-width: 0; background: var(--key); border-radius: 6px; font-size: 22px; color: var(--strong); }
+.keyboard button:active { background: var(--key-active); }
+.keyboard button.wide { flex: 1.6; font-size: 16px; background: var(--panel); }
+.keyboard button.space { flex: 5; }
+.keyboard button.on { background: var(--accent); color: var(--accent-text); }
