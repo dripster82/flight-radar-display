@@ -104,6 +104,13 @@ const localUrl = () => `${config.localRadarUrl}${config.localRadarUrl.includes('
 const UNIT_METRES = { km: 1000, miles: 1609.344, nautical: 1852 };
 const UNIT_LABEL = { km: 'km', miles: 'mi', nautical: 'nmi' };
 
+// tar1090's column of one-letter map buttons has more than a touchscreen needs. These are left out:
+// T (all tracks; Settings > Map shows has it), K (track labels), M (select several), P (keep old positions), R (follow a random aircraft).
+const HIDDEN_MAP_BUTTONS = ['T', 'K', 'M', 'P', 'R'];
+function hideMapButtons(wc) {
+  wc.insertCSS(`${HIDDEN_MAP_BUTTONS.map((id) => `#${id}.button`).join(', ')} { display: none !important; }`).catch(() => {});
+}
+
 // For the "Radar scope" map style: once the local map has loaded, the wireframe-and-sweep overlay
 // is run inside it. The outline data is public-domain Natural Earth coastlines and borders.
 function addRadarScope(wc) {
@@ -125,7 +132,7 @@ function forgetMapExtras(wc) {
 }
 
 const tabs = {
-  local: { url: config.localRadarUrl, onLoad: (wc) => { forgetMapExtras(wc); addRadarScope(wc); } },
+  local: { url: config.localRadarUrl, onLoad: (wc) => { hideMapButtons(wc); forgetMapExtras(wc); addRadarScope(wc); } },
   // A named persistent partition keeps the FR24 login across restarts.
   fr24: { url: config.fr24Url, partition: 'persist:fr24' },
   // Our own settings page (Wi-Fi and brightness); only pages with `file` get the preload bridge.
@@ -193,23 +200,43 @@ function select(name) {
 }
 
 // A message shown once over the whole screen, the first time the device is switched on: the
-// "welcome" title and message in config.json. Touching the screen dismisses it for good (the
-// choice is kept with the other settings). `scripts/protect.sh enable --show-welcome` arms it again.
-function showWelcomeOnce() {
-  const text = config.welcome || {};
-  if (!(text.title || text.message) || display.get().welcomeShown) return;
+// "welcome" title and message in config.json. It stays until the screen is touched, and then does not
+// come back by itself (the choice is kept with the other settings); Settings can show it again.
+// `scripts/protect.sh enable --show-welcome` arms it again.
+const welcomeText = () => ({ title: String((config.welcome || {}).title || ''), message: String((config.welcome || {}).message || '') });
+function showWelcome() {
+  const text = welcomeText();
+  if (!(text.title || text.message) || welcomeView) return;
+  hideKeyboard();
   welcomeView = new WebContentsView({ webPreferences: { preload: PRELOAD } });
   win.contentView.addChildView(welcomeView); // added last, so it sits above the tabs
   welcomeView.webContents.on('did-finish-load', () => welcomeView.webContents.setZoomFactor(ZOOM));
   welcomeView.webContents.loadFile(path.join(__dirname, 'welcome.html'));
-  ipcMain.handle('welcome:get', () => ({ title: String(text.title || ''), message: String(text.message || '') }));
-  ipcMain.once('welcome:done', () => {
-    win.contentView.removeChildView(welcomeView);
-    welcomeView.webContents.close();
-    welcomeView = null;
-    display.update({ welcomeShown: true });
-    requestBackup('settings');
-  });
+  layout();
+}
+function showWelcomeOnce() {
+  if (!display.get().welcomeShown) showWelcome();
+}
+ipcMain.handle('welcome:get', welcomeText);
+ipcMain.on('welcome:show', showWelcome); // "View Christmas message" in Settings
+ipcMain.on('welcome:done', () => {
+  if (!welcomeView) return;
+  win.contentView.removeChildView(welcomeView);
+  welcomeView.webContents.close();
+  welcomeView = null;
+  display.update({ welcomeShown: true });
+});
+
+// True while a web tab is on a site other than its own (any address under flightradar24.com counts
+// as Flightradar24, so its sign-in pages do not). Our own "not available" notice is not another site.
+function isAway(tab) {
+  let at, home;
+  try { at = new URL(tab.view.webContents.getURL()); home = new URL(tab.url).hostname.replace(/^www\./, ''); } catch { return false; }
+  return /^https?:$/.test(at.protocol) && at.hostname !== home && !at.hostname.endsWith(`.${home}`);
+}
+function reportAway(tab) {
+  const name = Object.keys(tabs).find((key) => tabs[key] === tab);
+  if (bar) bar.webContents.send('away', name, isAway(tab));
 }
 
 function createTab(tab) {
@@ -227,6 +254,8 @@ function createTab(tab) {
     ? wc.loadFile(path.join(__dirname, tab.file))
     : wc.loadURL(tab.url).catch(() => {})); // failures are handled by did-fail-load
   wc.on('did-start-navigation', (details) => { if (details.isMainFrame && !details.isSameDocument && typingInto === wc) hideKeyboard(); });
+  // The tab bar offers a way back while a web tab is showing some other site (see tabbar.html).
+  if (!tab.file) for (const event of ['did-navigate', 'did-navigate-in-page']) wc.on(event, () => reportAway(tab));
   // There is no way back from a popup on a kiosk, so open links in place instead.
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   // If a site cannot load (receiver still starting, no network), show a notice and keep retrying.
@@ -378,6 +407,7 @@ app.whenReady().then(() => {
   bar.webContents.on('did-finish-load', () => {
     bar.webContents.setZoomFactor(ZOOM);
     bar.webContents.send('active', active);
+    for (const tab of Object.values(tabs)) if (tab.view && !tab.file) reportAway(tab);
     sendStatus();
   });
 
@@ -413,7 +443,7 @@ app.whenReady().then(() => {
   ipcMain.on('keyboard:hide', (event) => { if (event.sender === typingInto) hideKeyboard(); });
   ipcMain.on('keyboard:key', (event, key) => { if (event.sender === keyboardView.webContents) typeKey(key); });
   // The way out when a map tab is stuck on a sign-in page or has wandered off to another site:
-  // back to that tab's start page (the home button on the tab bar, and a button in Settings).
+  // back to that tab's start page (a button in Settings).
   ipcMain.on('tab:home', (_e, name) => {
     if (!tabs[name] || tabs[name].file) return;
     tabs[name].load();

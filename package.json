@@ -5,7 +5,9 @@
   "private": true,
   "main": "src/main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "start:test": "LOCAL_RADAR_URL='https://globe.adsb.lol/?lat=53.9583&lon=-1.0803&zoom=8' HOME_LOCATION=53.9583,-1.0803 electron .",
+    "start:fresh": "FLIGHT_RADAR_DATA_DIR=\"$(mktemp -d)\" npm run start:test"
   },
   "devDependencies": {
     "electron": "^45.2.3"

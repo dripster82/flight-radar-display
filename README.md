@@ -15,7 +15,8 @@ npm start
 With no receiver, the first tab shows a "not available yet" notice. To see a live map instead:
 
 ```sh
-LOCAL_RADAR_URL=https://globe.adsb.lol/ npm start
+npm run start:test     # the public map at globe.adsb.lol stands in for the receiver, with a set home location
+npm run start:fresh    # the same, from an empty data folder: no settings or sign-in, as on a first start
 ```
 
 ## Install on the Pi
@@ -113,10 +114,11 @@ shows what is in force.
 ## What is on screen
 
 - **My Receiver / Flightradar24** tabs. Tapping the tab you are on returns it to its home view.
-- **Home button** (the house, beside the tabs): takes the map tab you are on back to its start
-  page. This is the way out if Flightradar24 is stuck on a sign-in page or has wandered off to
-  another site. Settings has the same button for Flightradar24, plus **Sign out and start again**,
-  which also forgets the sign-in and everything else the site has stored.
+- **Return arrow** (beside the Flightradar24 tab): appears only while that tab is showing some
+  other website, and takes it back to Flightradar24.
+- **Flightradar24 reset** (in Settings): **Back to start page** is the way out if Flightradar24 is
+  stuck on a sign-in page or has wandered off to another site. **Sign out and start again** also
+  forgets the sign-in and everything else the site has stored.
 - **On-screen keyboard for web pages**: touching a text box on either map tab (the Flightradar24
   sign-in or its search box, say) brings up a keyboard under the page; the page shrinks to make
   room. **Enter** submits, **Hide** puts it away, and touching the box again brings it back.

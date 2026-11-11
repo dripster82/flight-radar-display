@@ -22,8 +22,8 @@
   onScreenKeyboard(document.getElementById('keys'), {
     onType: (text) => window.radar.keyboardKey({ text }),
     onDelete: () => window.radar.keyboardKey({ key: 'Backspace' }),
+    onEnter: () => window.radar.keyboardKey({ key: 'Enter' }),
     extraKeys: [
-      { label: 'Enter', className: 'on', onPress: () => window.radar.keyboardKey({ key: 'Enter' }) },
       { label: 'Hide', onPress: () => window.radar.keyboardKey({ key: 'hide' }) },
     ],
   });

@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('radar', {
   select: (name) => ipcRenderer.send('select', name),
+  onAway: (callback) => ipcRenderer.on('away', (_e, name, away) => callback(name, away)),
   onActive: (callback) => ipcRenderer.on('active', (_e, name) => callback(name)),
   onStatus: (callback) => ipcRenderer.on('status', (_e, status) => callback(status)),
   wifiList: () => ipcRenderer.invoke('wifi:list'),
@@ -17,6 +18,7 @@ contextBridge.exposeInMainWorld('radar', {
   tabHome: (name) => ipcRenderer.send('tab:home', name),
   fr24SignOut: () => ipcRenderer.send('fr24:signOut'),
   welcomeGet: () => ipcRenderer.invoke('welcome:get'),
+  welcomeShow: () => ipcRenderer.send('welcome:show'),
   welcomeDone: () => ipcRenderer.send('welcome:done'),
 });
 

@@ -81,7 +81,8 @@ sudo reboot
 | Forget a network | Settings > Wi-Fi > Forget | It leaves the list | — |
 | Flightradar24 loads and signs in | Flightradar24 tab; touch the e-mail box | The app's keyboard slides up under the page; typing, Enter and Hide work; sign-in succeeds | No keyboard: tell Claude which box (it may be inside a frame from another site). Meanwhile a USB keyboard works |
 | Only one keyboard appears | Same | Just the app's keyboard, not a second one from the system | Two keyboards: `sudo raspi-config nonint do_squeekboard S3` (the system one off) and reboot |
-| Home button | On the Flightradar24 tab, follow a link away from the site, then touch the house beside the tabs | Back at the Flightradar24 start page | — |
+| Return arrow | On the Flightradar24 tab, follow a link away from the site | An arrow appears beside the tab; touching it returns to Flightradar24 and the arrow goes | — |
+| Back to start page | On the Flightradar24 tab, follow a link away from the site, then Settings > Flightradar24 > Back to start page | Back at the Flightradar24 start page | — |
 | Sign out and start again | Settings > Flightradar24, tap twice | Flightradar24 opens signed out | — |
 | The sign-in survives a restart | `sudo reboot` | Still signed in | Check the app's data folder is writable |
 | "My location" on Flightradar24 | Tap its location button | Centres on the GPS (or home) position | — |

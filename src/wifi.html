@@ -86,6 +86,10 @@
     <button class="action" id="fr24Home">Back to start page</button>
     <button class="action" id="fr24SignOut">Sign out and start again</button>
   </div>
+  <div id="welcome" class="choices" hidden>
+    <span class="label">Message</span>
+    <button class="action" id="welcomeShow">View Christmas message</button>
+  </div>
   <header>
     <h1 id="title">Wi-Fi networks</h1>
     <button class="action" id="refresh">Refresh</button>
@@ -190,6 +194,7 @@
   const keyboard = onScreenKeyboard($('keys'), {
     onType: (ch) => { if (password.length < 63) password += ch; drawPassword(); }, // WPA passwords are at most 63 characters
     onDelete: () => { password = password.slice(0, -1); drawPassword(); },
+    onEnter: () => $('join').click(),
   });
 
   // Shown in the clear: on a touchscreen with no keyboard, seeing what was typed matters more than hiding it.
@@ -302,6 +307,9 @@
     endSignOutConfirm();
     window.radar.fr24SignOut();
   });
+  // Only offered when config.json has a welcome title or message.
+  window.radar.welcomeGet().then((text) => { $('welcome').hidden = !(text.title || text.message); });
+  $('welcomeShow').addEventListener('click', () => window.radar.welcomeShow());
   $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
   refreshHome();
   setInterval(refreshHome, 5000);

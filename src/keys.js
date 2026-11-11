@@ -1,16 +1,17 @@
 // The on-screen keyboard, used by the Settings page (Wi-Fi passwords) and by keyboard.html (typing
 // into web pages such as the Flightradar24 sign-in). Styled by the .keyboard rules in theme.css.
 //
-//   onScreenKeyboard(container, { onType(character), onDelete(), extraKeys: [{ label, className, onPress }] })
+//   onScreenKeyboard(container, { onType(character), onDelete(), onEnter(), extraKeys: [{ label, className, onPress }] })
 //
-// The bottom row always has @, space and a full stop; extraKeys are added to its end. Returns { reset() } to go back to lower-case letters.
+// Delete and Enter sit where a computer keyboard has them: Delete at the top right, Enter at the right
+// of the middle row. The bottom row always has @, space and a full stop; extraKeys are added to its end. Returns { reset() } to go back to lower-case letters.
 const KEY_LAYERS = {
   abc: ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'],
   num: ['1234567890', '@#£$%&*-+=', '!"\'():;/?'],
   sym: ['~`|\\{}[]<>', '^_,.€', ''],
 };
 
-function onScreenKeyboard(container, { onType, onDelete, extraKeys = [] }) {
+function onScreenKeyboard(container, { onType, onDelete, onEnter, extraKeys = [] }) {
   let layer = 'abc', shift = false;
   container.classList.add('keyboard');
 
@@ -40,7 +41,8 @@ function onScreenKeyboard(container, { onType, onDelete, extraKeys = [] }) {
         const out = layer === 'abc' && shift ? ch.toUpperCase() : ch;
         row.append(key(out, type(out)));
       }
-      if (i === 2) row.append(key('Delete', onDelete, 'wide'));
+      if (i === 0) row.append(key('Delete', onDelete, 'wide'));
+      if (i === 1 && onEnter) row.append(key('Enter', onEnter, 'wide on'));
       container.append(row);
     });
     const last = document.createElement('div');

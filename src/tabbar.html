@@ -14,8 +14,8 @@
   }
   button.tab { flex: 1; letter-spacing: .08em; }
   button[aria-pressed="true"] { color: var(--strong); border-bottom-color: var(--accent); background: var(--panel); }
-  button.gear, button.home { flex: 0 0 60px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--line); }
-  button.home { border-left: 0; border-right: 1px solid var(--line); color: var(--text); }
+  button.back { flex: 0 0 60px; display: flex; align-items: center; justify-content: center; color: var(--accent); border-right: 1px solid var(--line); }
+  button.gear { flex: 0 0 60px; display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--line); }
 
   [hidden] { display: none !important; }
   #status { display: flex; align-items: center; gap: 8px; padding: 0 12px; }
@@ -32,9 +32,9 @@
 <body>
   <button class="tab" data-tab="local" aria-pressed="false">MY RECEIVER</button>
   <button class="tab" data-tab="fr24" aria-pressed="false">FLIGHTRADAR24</button>
-  <!-- Takes the map tab you are on back to its start page: the way out of a stuck sign-in page or a page outside Flightradar24. -->
-  <button class="home" id="home" aria-label="Back to this tab's start page">
-    <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h4.5v-5.5h4v5.5h4.5V10"/></svg>
+  <!-- Only shown while the Flightradar24 tab is on some other site: takes it back to Flightradar24. -->
+  <button class="back" id="back" aria-label="Return to Flightradar24" hidden>
+    <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
   </button>
   <div id="status">
     <span class="light" id="receiver" data-state="off">Receiver</span>
@@ -47,15 +47,13 @@
     <svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
   </button>
 <script>
+  window.radar.onAway((name, away) => { if (name === 'fr24') document.getElementById('back').hidden = !away; });
+  document.getElementById('back').addEventListener('click', () => window.radar.tabHome('fr24'));
   const buttons = document.querySelectorAll('button[data-tab]');
   buttons.forEach((b) => b.addEventListener('click', () => window.radar.select(b.dataset.tab)));
-  let current = null;
   window.radar.onActive((name) => {
-    current = name;
     buttons.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === name)));
-    document.getElementById('home').hidden = name === 'wifi'; // Settings has no start page to go back to
   });
-  document.getElementById('home').addEventListener('click', () => window.radar.tabHome(current));
 
   // Green = working, red = not working, amber = held back on purpose, grey = not present on this machine.
   const MEANING = { ok: 'working', bad: 'not working', paused: 'paused while away from home', waiting: 'waiting for a GPS fix at home', off: 'not running' };
