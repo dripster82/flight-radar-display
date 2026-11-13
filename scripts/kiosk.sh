@@ -8,6 +8,19 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 STORAGE=/var/lib/flight-radar-data
 if mountpoint -q "$STORAGE/settings"; then export FLIGHT_RADAR_SETTINGS_DIR="$STORAGE/settings/data"; fi
 if mountpoint -q "$STORAGE/browser"; then export FLIGHT_RADAR_DATA_DIR="$STORAGE/browser/data"; fi
+# The web cache and the diagnostic log have areas of their own (no backups; see data-area.sh).
+# There are two browser profiles, each with a page cache and a script cache under the same limit,
+# so the limit is a quarter of the area.
+if mountpoint -q "$STORAGE/cache"; then
+  export FLIGHT_RADAR_CACHE_DIR="$STORAGE/cache/data"
+  export FLIGHT_RADAR_CACHE_MB="$(( $(df -Pm "$STORAGE/cache" | awk 'NR==2 {print $2}') / 4 ))"
+fi
+# The log: read it with  tail -50 "$FLIGHT_RADAR_LOG_DIR/flight-radar.log"  (see src/log.js).
+if mountpoint -q "$STORAGE/log"; then export FLIGHT_RADAR_LOG_DIR="$STORAGE/log/data"
+else export FLIGHT_RADAR_LOG_DIR="${FLIGHT_RADAR_SETTINGS_DIR:-$HOME/.config/flight-radar-display}/logs"; fi
+mkdir -p "$FLIGHT_RADAR_LOG_DIR"
+note() { echo "$(date '+%Y-%m-%d %H:%M:%S') kiosk    $*" >> "$FLIGHT_RADAR_LOG_DIR/flight-radar.log"; }
+note "session started, $(uptime -p 2>/dev/null || echo 'uptime unknown') since power-on"
 
 # The Touch Display 2 is a portrait panel (720x1280). Turn the picture to landscape; touch follows
 # because scripts/install.sh maps the touchscreen to this output. screenRotation in config.json is
@@ -25,5 +38,6 @@ pkill -f lwrespawn; pkill -f wf-panel-pi; pkill -f 'pcmanfm.*--desktop'
 
 while true; do
   KIOSK=1 "$REPO/vendor/electron/electron" "$REPO" --ozone-platform-hint=auto
+  note "the app stopped (exit code $?); starting it again"
   sleep 2
 done

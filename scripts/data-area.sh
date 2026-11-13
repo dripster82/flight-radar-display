@@ -14,6 +14,13 @@
 # fault in one never touches the others, and writing to them never changes the boot partition's
 # own structure.
 #
+# Two more areas are kept in the same way but WITHOUT backups (PLAIN_AREAS):
+#   cache      the browser's web cache, so the maps and Flightradar24 open quickly after a restart
+#   log        the app's diagnostic log (src/log.js)
+# They are written all the time and the device works without what is in them, so there is nothing
+# worth restoring: one that is damaged beyond repair is simply made again, empty. They never raise
+# the "restored" note and never stop the device starting.
+#
 # The danger is power going while something is being WRITTEN. So each area has two backup copies
 # besides itself, and no two of the three are ever written at the same time:
 #   1. A backup exists before the area is changed (the one made after the previous change).
@@ -37,6 +44,7 @@ set -u
 
 STORE=/boot/firmware/flight-radar
 AREAS="settings:16 wifi:16 browser:64"            # name:size in MB
+PLAIN_AREAS="cache:96 log:8"                      # name:size in MB; no backups
 ROOT=/var/lib/flight-radar-data
 DEFAULTS=/etc/flight-radar/defaults
 NM_DIR=/etc/NetworkManager/system-connections
@@ -50,7 +58,8 @@ CONF="${FLIGHT_RADAR_CONF:-/etc/flight-radar/data-area.conf}"
 
 log() { echo "flight-radar-data: $*"; }
 names() { local a; for a in $AREAS; do echo "${a%%:*}"; done; }
-bytes_of() { local a; for a in $AREAS; do [ "${a%%:*}" = "$1" ] && echo $(( ${a##*:} * 1024 * 1024 )); done; }
+plain_names() { local a; for a in $PLAIN_AREAS; do echo "${a%%:*}"; done; }
+bytes_of() { local a; for a in $AREAS $PLAIN_AREAS; do [ "${a%%:*}" = "$1" ] && echo $(( ${a##*:} * 1024 * 1024 )); done; }
 label() {
   case "$1" in
     settings) echo "Settings storage" ;;
@@ -210,10 +219,29 @@ check_and_open() {
   mountpoint -q "$(mount_of "$area")"
 }
 
+# An area without backups: repaired if it can be, otherwise made again empty.
+open_plain() {
+  local area="$1" at data options=loop,noatime
+  at="$(mount_of "$area")"; data="$at/data"
+  mountpoint -q "$at" && return 0
+  # The log is written straight to the card, so the last lines before a power cut are there to read.
+  [ "$area" = log ] && options="$options,sync"
+  ensure_file "$(image "$area")" "$(bytes_of "$area")"
+  mkdir -p "$at"
+  e2fsck -p "$(image "$area")" >/dev/null 2>&1
+  if [ $? -ge 4 ] || ! mount -o "$options" "$(image "$area")" "$at" 2>/dev/null || ! { mkdir -p "$data" && touch "$data/.write-test"; } 2>/dev/null; then
+    umount "$at" 2>/dev/null
+    log "$area: new or beyond repair; made again, empty"
+    mkfs.ext4 -q -F -m 0 -L "fr-$area" "$(image "$area")" && mount -o "$options" "$(image "$area")" "$at" && mkdir -p "$data" || return 1
+  fi
+  rm -f "$data/.write-test"
+  chown "$OWNER": "$data"
+}
+
 if [ "${1:-}" = backup ]; then
   status=0
   for area in $( [ "${2:-all}" = all ] && names || echo "$2" ); do
-    [ -n "$(bytes_of "$area")" ] || { log "unknown area: $area"; status=1; continue; }
+    names | grep -qx "$area" || { log "no backups are kept for: $area"; status=1; continue; }
     backup "$area" || status=1
   done
   exit "$status"
@@ -223,6 +251,10 @@ mkdir -p "$STORE"
 status=0
 for area in $(names); do
   check_and_open "$area" || { log "$area: unavailable; it will run on defaults and forget changes at power-off"; status=1; }
+done
+
+for area in $(plain_names); do
+  open_plain "$area" || log "$area: unavailable; the device works without it"
 done
 
 # Saved Wi-Fi networks are read by the system from here, so a network joined on holiday is remembered.

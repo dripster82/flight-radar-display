@@ -68,6 +68,12 @@ sudo reboot
   backup stands.
 - **Defaults** are a copy of all three areas as they were when protection was switched on, kept
   on the read-only system and never written again.
+- **The web cache and the log** each have a storage area too, kept the same way but with no
+  backups: both are written all the time, and the device works without what is in them. One that
+  is damaged beyond repair is made again, empty. The web cache holds the map tiles and the
+  Flightradar24 site's files, so both maps open quickly after a restart instead of being
+  downloaded again. All of this needs about 390 MB free on the boot partition; if there is less,
+  `protect.sh enable` says so and how to make the cache smaller.
 - **Auto-restore:** at every start-up each area is checked. One that is missing, damaged beyond
   repair, unwritable, or (for settings) holds a corrupt file is replaced by its most recent intact
   backup, or the previous one if that is not intact. If neither can be used, that area alone is
@@ -86,6 +92,25 @@ restored. It works in a sandbox folder, so it is safe to run on a set-up device:
 ```sh
 sudo tests/storage-test.sh
 ```
+
+## Diagnostic log
+
+The app keeps a log of what started, what changed and what went wrong: the version running, how
+long each map took to load, whether the graphics chip is in use, power supply warnings
+(under-voltage makes the Pi slow itself down), status lights changing, location moves, Wi-Fi joins,
+settings changes, crashes and errors. Wi-Fi passwords are never written to it.
+
+- **On the device:** Settings, at the bottom, **View log**. Newest first, trouble in red.
+- **Over SSH:**
+
+```sh
+tail -50 /var/lib/flight-radar-data/log/data/flight-radar.log        # with power-cut protection on
+tail -50 ~/.config/flight-radar-display/logs/flight-radar.log        # with it off
+```
+
+A new file is started each day (and whenever one reaches 256 KB); the seven before it are kept as
+`flight-radar.1.log` to `flight-radar.7.log`, so the whole log stays under about 2 MB. The device
+has no clock battery, so lines written before it has reached the internet can carry an old date.
 
 ## Updating
 
@@ -161,6 +186,7 @@ shows what is in force.
 | `feedRequiresGps` | The starting value of the **Feed waits for GPS** switch in Settings; the switch then overrides it on the device. On: after boot the feeder stays off until five GPS fixes in a row place the device within `awayKm` of `home`, and it is stopped again if GPS places it further away. Off: the feeder starts at boot without waiting, and is still stopped if GPS shows the device is away. Turn it off if the GPS cannot get a fix where the device lives, or it will never feed. |
 | `night` | Hours during which the screen dims to `brightness` percent, when night dimming is on. |
 | `zoom` | 1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen. |
+| `graphicsAcceleration` | Leave out, or `true`: the app tells the browser engine to use the Pi's graphics chip even where it would not by default. `false` leaves the engine to decide, for use if the screen ever shows drawing faults. The log's `gpu` line says what is in force. |
 | `screenRotation` | 90 or 270 turns the portrait Touch Display 2 to landscape (whichever way up the enclosure holds it); 0 leaves the picture alone. Applied each time the kiosk starts. |
 | `splashRotation` | Optional. The same for the start-up splash, if it comes out the other way up from the app. Re-run `scripts/install.sh` after changing it. |
 | `welcome` | `title` and `message` shown once at the first start; leave both empty for none. |

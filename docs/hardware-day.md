@@ -53,6 +53,10 @@ sudo reboot
 | Text and buttons are a comfortable size | Look | Finger-sized buttons | Change `"zoom"` in `config.json` (1.5 by default) |
 | Brightness slider works | Settings > Brightness | The screen dims and brightens | `ls -l /sys/class/backlight/*/brightness` should show `rw-rw-rw-`; if not, re-run the install |
 | Night dimming | Set the clock forward, or wait until 22:00 | Dims to 15% | Check `night` in `config.json` |
+| The log is being written | Settings, bottom of the page, **View log** | Lines for this start: `start`, `gpu`, `power`, `tab` | `ls ~/.config/flight-radar-display/logs` |
+| The power supply is good | The `power` line in the log | `power supply good` | "UNDER-VOLTAGE" means the supply or cable is too weak: use the official Pi supply |
+| The graphics chip is in use | The `gpu` line in the log | `drawing enabled` and `WebGL enabled` (not `disabled_software`) | Send Claude the line; `"graphicsAcceleration": false` in `config.json` goes back to the engine's own choice |
+| Start-up time | The `tab` lines in the log | Both maps loaded; note the seconds for comparison later | Check the `power` line first |
 | The screen never blanks | Leave it 15 minutes | Still on | `sudo raspi-config nonint do_blanking 1` |
 | Start-up shows the splash, not scrolling text | Reboot and watch | The radar splash the right way up, then the app | Sideways or upside down: set `"splashRotation"` in `config.json` to 270 (or 90, or 0) and re-run `scripts/install.sh`. Text still scrolls: `sudo raspi-config nonint do_boot_splash 0` |
 | Welcome message shows once | Fill in `welcome` in `config.json`, restart | The message; a touch dismisses it and it does not return | Check `welcome` is not empty. To see it again: `scripts/protect.sh enable --show-welcome` (section 7) |
@@ -96,19 +100,22 @@ Do this only when everything above is right, the Wi-Fi is joined, Flightradar24 
 the theme is chosen: the state at this moment becomes the defaults.
 
 ```sh
-sudo tests/storage-test.sh          # expect: 43 passed, 0 failed
+sudo tests/storage-test.sh          # expect: 53 passed, 0 failed
 scripts/protect.sh enable          # add --show-welcome on the very last time, before wrapping
 sudo reboot
 ```
 
 | Check | Command or action | Expected | If it fails |
 |---|---|---|---|
-| The storage test passes on the Pi | As above | `43 passed, 0 failed` | Send Claude the output; do not enable protection |
-| The system is read-only | `scripts/protect.sh status` | `System: read-only (protected)` and three areas "in use" | `findmnt /` should show `overlay` |
+| There is room for the storage | `df -m /boot/firmware` | At least 400 in the Available column | Enable with a smaller cache: `FLIGHT_RADAR_PLAIN_AREAS='cache:48 log:8' scripts/protect.sh enable` |
+| The storage test passes on the Pi | As above | `53 passed, 0 failed` | Send Claude the output; do not enable protection |
+| The system is read-only | `scripts/protect.sh status` | `System: read-only (protected)` and five areas "in use" | `findmnt /` should show `overlay` |
 | Settings survive a restart | Change the theme, wait 10 seconds, `sudo reboot` | The new theme | `systemctl status flight-radar-data` |
 | A change is backed up | `journalctl -b \| grep flight-radar-data \| tail -3` after changing a setting | `settings: backup N written and checked` | Check passwordless sudo |
 | The sign-in is backed up | Sign out and in on Flightradar24, then the same command | `browser: backup N written and checked` | Tell Claude: the site's sign-in cookie names may have changed |
 | Pulling the plug is safe | Pull the plug while it is running, ten times, including once within 3 seconds of changing a setting | It starts normally every time; at worst the last change is lost and Settings says what was restored | Send Claude `journalctl -b \| grep flight-radar` |
+| The web cache is kept | Open both maps, `sudo reboot`, then Settings > View log | A `start` line ending "web cache kept in /var/lib/flight-radar-data/cache/data", and the `tab` lines showing both maps loaded sooner than on the first start | `scripts/protect.sh status` should show `cache: in use` |
+| The log survives a restart | Settings > View log after the reboot | Lines from before the reboot below the new ones | `scripts/protect.sh status` should show `log: in use` |
 | Nothing else was written | `touch ~/test-file`, reboot, `ls ~/test-file` | "No such file" | Protection is not on |
 
 ## 8. Updating

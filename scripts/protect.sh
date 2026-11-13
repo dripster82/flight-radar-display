@@ -72,23 +72,25 @@ case "${1:-}" in
 
     # Where the storage lives: a folder on the boot partition, unless told otherwise (for testing).
     # Switching it back on (after an update, say) keeps the place and sizes chosen the first time.
-    STORE=; AREAS=
+    STORE=; AREAS=; PLAIN_AREAS=
     [ -f "$ETC/data-area.conf" ] && . "$ETC/data-area.conf"
     store="${FLIGHT_RADAR_STORE:-${STORE:-/boot/firmware/flight-radar}}"
     areas="${FLIGHT_RADAR_AREAS:-${AREAS:-settings:16 wifi:16 browser:64}}"   # name:size in MB
+    plain="${FLIGHT_RADAR_PLAIN_AREAS:-${PLAIN_AREAS:-cache:96 log:8}}"       # web cache and log: no backups
     store_parent="$(dirname "$store")"
     [ -d "$store_parent" ] || { echo "$store_parent does not exist; set FLIGHT_RADAR_STORE to a folder on a partition that stays writable." >&2; exit 1; }
     need_mb=0
     for area in $areas; do need_mb=$((need_mb + ${area##*:} * 3)); done   # each area plus its two backups
+    for area in $plain; do need_mb=$((need_mb + ${area##*:})); done
     sudo systemctl stop flight-radar-data.service 2>/dev/null || true   # frees any earlier storage before measuring
     save_defaults "${2:-}"
     sudo rm -rf "$store"
     free_mb="$(df -Pm "$store_parent" | awk 'NR==2 {print $4}')"
     if [ "$free_mb" -lt $((need_mb + 10)) ]; then
-      echo "Not enough room in $store_parent: ${need_mb} MB needed for the storage areas and their backups, ${free_mb} MB free. Set FLIGHT_RADAR_AREAS to smaller sizes." >&2
+      echo "Not enough room in $store_parent: ${need_mb} MB needed for the storage areas and their backups, ${free_mb} MB free. Make the web cache smaller, for example: FLIGHT_RADAR_PLAIN_AREAS='cache:48 log:8' scripts/protect.sh enable" >&2
       exit 1
     fi
-    printf 'STORE=%q\nAREAS=%q\n' "$store" "$areas" | sudo tee "$ETC/data-area.conf" >/dev/null
+    printf 'STORE=%q\nAREAS=%q\nPLAIN_AREAS=%q\n' "$store" "$areas" "$plain" | sudo tee "$ETC/data-area.conf" >/dev/null
 
     echo "Setting up the storage areas"
     sudo tee /etc/systemd/system/flight-radar-data.service >/dev/null <<EOF
@@ -104,7 +106,7 @@ Conflicts=shutdown.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=$REPO/scripts/data-area.sh
-ExecStop=/bin/sh -c 'umount $NM_DIR 2>/dev/null; for area in settings wifi browser; do umount $ROOT/\$area 2>/dev/null; done; true'
+ExecStop=/bin/sh -c 'umount $NM_DIR 2>/dev/null; for area in settings wifi browser cache log; do umount $ROOT/\$area 2>/dev/null; done; true'
 
 [Install]
 WantedBy=multi-user.target
@@ -149,7 +151,7 @@ EOF
     ;;
   status)
     overlay_on && echo "System: read-only (protected)" || echo "System: writable (NOT protected)"
-    for area in settings wifi browser; do
+    for area in settings wifi browser cache log; do
       if mountpoint -q "$ROOT/$area"; then
         echo "$area: in use, $(df -Ph "$ROOT/$area" | awk 'NR==2 {print $3 " of " $2 " used"}')"
       else

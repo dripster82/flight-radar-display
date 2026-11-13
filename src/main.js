@@ -10,16 +10,64 @@ const gps = require('./gps');
 const feed = require('./feed');
 const display = require('./display');
 const location = require('./location');
+const log = require('./log');
 
 // With power-cut protection on, the system is read-only and the app's data lives in separate
 // writable storage areas (see scripts/data-area.sh): the browser's data, which holds the
-// Flightradar24 sign-in, in one, and the settings files in another. The web cache is kept out of
-// storage, in memory: it is large, rewritten constantly, and not worth keeping.
-if (process.env.FLIGHT_RADAR_DATA_DIR) {
-  app.setPath('userData', process.env.FLIGHT_RADAR_DATA_DIR);
-  app.commandLine.appendSwitch('disk-cache-dir', path.join(os.tmpdir(), 'flight-radar-cache'));
-}
+// Flightradar24 sign-in, in one, and the settings files in another.
+const DATA_DIR = process.env.FLIGHT_RADAR_DATA_DIR || null;
+if (DATA_DIR) app.setPath('userData', DATA_DIR);
 const SETTINGS_DIR = process.env.FLIGHT_RADAR_SETTINGS_DIR || app.getPath('userData');
+
+// The diagnostic log (see log.js). scripts/kiosk.sh names the folder; in development it sits with the settings.
+log.init(process.env.FLIGHT_RADAR_LOG_DIR || path.join(SETTINGS_DIR, 'logs'));
+const STARTED_AT = Date.now();
+const sinceStart = () => `${((Date.now() - STARTED_AT) / 1000).toFixed(1)} s after the app started`;
+// The web cache (map tiles, the Flightradar24 site's files, and the compiled form of their scripts)
+// is large and rewritten constantly, so it must not live in the sign-in's storage area, which is
+// small and writes everything straight to the card. It has an area of its own (FLIGHT_RADAR_CACHE_DIR,
+// set by scripts/kiosk.sh), so pages open quickly after a restart instead of being downloaded
+// again; without that area it goes to memory and is lost at power-off. The browser engine has no
+// setting for where a profile's cache goes (it is always inside the profile's folder, and the old
+// --disk-cache-dir switch is ignored), so each cache folder is replaced by a link to the real
+// place. This is redone at every start, because the engine replaces a link with a plain folder if
+// it ever throws a cache away. There are two profiles, the local map's and Flightradar24's
+// (Partitions/fr24, from the partition name in `tabs`), each with a page cache and a script cache,
+// and the size limit applies to each of the four. A full area does no harm: the engine just stops adding to it.
+// (Linux only: on a Mac the engine's own safety rules stop it writing through such a link, and
+// there the cache simply stays with the browser data.)
+const CACHE_DIR = DATA_DIR && process.platform === 'linux' ? process.env.FLIGHT_RADAR_CACHE_DIR || path.join(os.tmpdir(), 'flight-radar-cache') : null;
+const CACHE_MB_EACH = Number(process.env.FLIGHT_RADAR_CACHE_MB) || 24;
+function linkCaches() {
+  for (const [profile, folder] of [['', 'local'], ['Partitions/fr24', 'fr24']]) {
+    for (const name of ['Cache', 'Code Cache']) {
+      const link = path.join(DATA_DIR, profile, name);
+      const target = path.join(CACHE_DIR, folder, name);
+      try {
+        fs.mkdirSync(target, { recursive: true });
+        fs.mkdirSync(path.dirname(link), { recursive: true });
+        let pointsAt = null;
+        try { pointsAt = fs.readlinkSync(link); } catch { /* missing, or a plain folder */ }
+        if (pointsAt === target) continue;
+        fs.rmSync(link, { recursive: true, force: true });
+        fs.symlinkSync(target, link);
+      } catch (err) {
+        log('error', `web cache: could not link ${link} to ${target}: ${err.message}`);
+      }
+    }
+  }
+}
+if (CACHE_DIR) {
+  app.commandLine.appendSwitch('disk-cache-size', String(CACHE_MB_EACH * 1024 * 1024));
+  linkCaches();
+}
+log('start', `app ${app.getVersion()}, Electron ${process.versions.electron}, ${process.platform} ${process.arch};`,
+  `power-cut protection ${process.env.FLIGHT_RADAR_SETTINGS_DIR ? 'on' : 'off'};`,
+  `web cache ${!CACHE_DIR ? 'kept with the browser data' : process.env.FLIGHT_RADAR_CACHE_DIR ? `kept in ${CACHE_DIR}, up to ${CACHE_MB_EACH} MB for each map` : 'in memory only, lost at power-off'}`);
+execFile('git', ['-C', path.join(__dirname, '..'), 'log', '-1', '--format=%h %cs %s'], { timeout: 5000 }, (err, out) => { if (!err) log('start', `version ${out.trim()}`); });
+// An error nobody caught would otherwise put a dialog box on a screen with no keyboard to dismiss it.
+process.on('uncaughtException', (err) => log('error', err));
+process.on('unhandledRejection', (err) => log('error', 'unhandled rejection:', err instanceof Error ? err : String(err)));
 
 // After something in storage changes, a fresh backup of that area is requested, so the change is
 // in a backup within seconds. Several changes close together make one backup. This is the ONLY
@@ -61,6 +109,14 @@ if (process.env.KIOSK) config.kiosk = process.env.KIOSK === '1';
 if (process.env.HOME_LOCATION) {
   const [latitude, longitude] = process.env.HOME_LOCATION.split(',').map(Number);
   config.home = { latitude, longitude };
+}
+// Graphics acceleration. On the Pi the browser engine can decide the graphics chip is not on its
+// approved list and draw everything with the processor instead, which makes the maps slow. These
+// tell it to use the chip anyway. If the chip then fails, the engine falls back by itself; the log
+// says which it ended up with ("gpu"). "graphicsAcceleration": false in config.json leaves it alone.
+if (process.platform === 'linux' && config.graphicsAcceleration !== false) {
+  app.commandLine.appendSwitch('ignore-gpu-blocklist');
+  app.commandLine.appendSwitch('enable-gpu-rasterization');
 }
 let home = location.valid(config.home); // the home pin
 // Choices made on the device's Settings screen are kept in the app's data folder and replace
@@ -251,7 +307,9 @@ function createTab(tab) {
     : { preload: WEB_PRELOAD, nodeIntegrationInSubFrames: true, ...(tab.partition ? { partition: tab.partition } : {}) };
   tab.view = new WebContentsView({ webPreferences });
   const wc = tab.view.webContents;
+  const name = Object.keys(tabs).find((key) => tabs[key] === tab);
   wc.on('did-finish-load', () => {
+    if (!wc.getURL().startsWith('file:')) log.state(`tab:${name}`, 'tab', `${name} loaded`, sinceStart());
     wc.setZoomFactor(ZOOM); // zoom is per site, so set it on every load
     if (tab.onLoad) tab.onLoad(wc);
   });
@@ -265,12 +323,16 @@ function createTab(tab) {
   // There is no way back from a popup on a kiosk, so open links in place instead.
   wc.setWindowOpenHandler(() => ({ action: 'deny' }));
   // If a site cannot load (receiver still starting, no network), show a notice and keep retrying.
-  wc.on('did-fail-load', (_e, code, _desc, url, isMainFrame) => {
+  wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 || url.startsWith('file:')) return; // -3 = navigation aborted
+    log.state(`tab:${name}`, 'tab', `${name} could not load (${desc || code}); retrying every ${RETRY_MS / 1000} s`);
     wc.loadFile(path.join(__dirname, 'offline.html'));
     clearTimeout(tab.retry); // one retry chain per tab, however many loads failed
     tab.retry = setTimeout(tab.load, RETRY_MS);
   });
+  wc.on('render-process-gone', (_e, details) => log('crash', `${name} page stopped: ${details.reason} (exit code ${details.exitCode})`));
+  wc.on('unresponsive', () => log('error', `${name} page stopped responding`));
+  wc.on('responsive', () => log('error', `${name} page is responding again`));
   tab.load();
   win.contentView.addChildView(tab.view);
 }
@@ -285,6 +347,7 @@ function controlFeedFromGps(position) {
   if (away !== verdict.away) verdict = { away, count: 0 };
   if (++verdict.count < FIXES_TO_TRUST || away === feedPaused) return;
   feedPaused = away;
+  log('feed', away ? 'GPS says away from home: stopping the Flightradar24 feeder' : 'GPS says at home: starting the Flightradar24 feeder');
   feed.setRunning(!away);
 }
 
@@ -324,6 +387,7 @@ function reposition() {
       to = current;
       tabs.local.view.webContents.executeJavaScript(REPOSITION_NOTE).catch(() => {});
       ok = await setReceiverLocation(to);
+      log('location', `receiver ${ok ? 'moved' : 'could NOT be moved'} to ${to.latitude}, ${to.longitude}`);
       // Give the decoder time to come back and start writing aircraft again (up to half a minute).
       for (let i = 0; i < 15; i++) {
         await new Promise((r) => setTimeout(r, 2000));
@@ -355,6 +419,7 @@ async function alignReceiver() {
 function moveTo(position) {
   if (!position || location.same(position, current)) return Promise.resolve(true);
   current = position;
+  log('location', `position in use is now ${position.latitude}, ${position.longitude} (${location.same(position, home) ? 'the home pin' : 'from the GPS'})`);
   saveOnDevice({ current });
   return reposition();
 }
@@ -376,6 +441,7 @@ function followGps(position) {
 function setHome(position, postcode) {
   const wasAtHome = !current || location.same(current, home);
   home = position;
+  log('location', `home pin set ${postcode ? 'by postcode' : 'to the GPS position'}: ${position.latitude}, ${position.longitude}`);
   saveOnDevice({ home, postcode: postcode || null });
   feedPaused = null;
   verdict = { away: null, count: 0 };
@@ -459,6 +525,10 @@ async function sendStatus() {
   if (feeder.state === 'off' && feedPaused) feeder.state = 'paused';
   else if (feeder.state === 'off' && feedPaused === null && feedWaitsForGps()) feeder.state = 'waiting';
   const gpsState = { state: Date.now() - gpsFixAt < GPS_FRESH_MS ? 'ok' : 'bad' };
+  log.state('status:receiver', 'status', `receiver: ${receiver.state === 'ok' ? 'working' : 'no aircraft data'}`);
+  log.state('status:feed', 'status', `Flightradar24 feeder: ${feeder.state}`);
+  log.state('status:gps', 'status', `GPS: ${gpsState.state === 'ok' ? 'has a fix' : 'no fix'}`, sinceStart());
+  log.state('status:wifi', 'status', `Wi-Fi: ${network.state === 'ok' ? `connected to ${network.name}` : network.state === 'off' ? 'not managed here' : 'not connected'}`);
   if (!bar.webContents.isDestroyed()) bar.webContents.send('status', { receiver, feed: feeder, gps: gpsState, wifi: network });
 }
 
@@ -477,7 +547,35 @@ async function captureAndQuit() {
   app.quit();
 }
 
+// Whether the graphics chip is really being used, and anything in the engine that dies.
+let gpuWas = '';
+app.on('gpu-info-update', () => {
+  const s = app.getGPUFeatureStatus();
+  const now = `drawing ${s.gpu_compositing}, rasterization ${s.rasterization}, WebGL ${s.webgl}`;
+  if (now !== gpuWas) log('gpu', gpuWas = now);
+});
+app.on('child-process-gone', (_e, details) => log('crash', `${details.type} process stopped: ${details.reason} (exit code ${details.exitCode})`));
+
+// The Pi's own record of its power supply and heat. Under-voltage makes it slow itself right down,
+// so this is the first thing to look at when the device feels sluggish. Not present off the Pi.
+const POWER_FLAGS = [[0x1, 'UNDER-VOLTAGE NOW'], [0x2, 'speed capped now'], [0x4, 'slowed down now'], [0x8, 'running hot now'],
+  [0x10000, 'under-voltage earlier'], [0x20000, 'speed capped earlier'], [0x40000, 'slowed down earlier'], [0x80000, 'ran hot earlier']];
+function watchPower() {
+  execFile('vcgencmd', ['get_throttled'], { timeout: 5000 }, (err, out) => {
+    if (err && err.code === 'ENOENT') return; // not a Pi
+    const value = err ? NaN : parseInt(String(out).split('=')[1], 16);
+    if (Number.isFinite(value)) {
+      const flags = POWER_FLAGS.filter(([bit]) => value & bit).map(([, name]) => name);
+      log.state('power', 'power', flags.length ? `power supply problem: ${flags.join(', ')}` : 'power supply good');
+    }
+    setTimeout(watchPower, 60000);
+  });
+}
+
 app.whenReady().then(() => {
+  const restored = storageRestored();
+  if (restored) log('storage', restored);
+  watchPower();
   // Before any page loads: each of our pages asks for the theme as it starts.
   display.init(config, SETTINGS_DIR);
   backUpSignInWhenItChanges();
@@ -522,6 +620,7 @@ app.whenReady().then(() => {
   alignReceiver();
   // Nothing else starts the feeder at boot (see scripts/install-fr24.sh), so when it is not
   // waiting for GPS it is started here.
+  log('feed', feedWaitsForGps() ? 'Flightradar24 feeder waits until the GPS shows the device is at home' : 'starting the Flightradar24 feeder');
   if (!feedWaitsForGps()) feed.setRunning(true);
   shareLocationWithMaps();
   setInterval(sendStatus, STATUS_EVERY_MS);
@@ -545,6 +644,7 @@ app.whenReady().then(() => {
   // And the stronger version for Flightradar24: forget the sign-in and everything else the site
   // has stored, then start again from its front page.
   ipcMain.on('fr24:signOut', async () => {
+    log('settings', 'Flightradar24: signed out and site data cleared');
     await session.fromPartition(tabs.fr24.partition).clearStorageData().catch(() => {});
     tabs.fr24.load();
     select('fr24');
@@ -553,17 +653,21 @@ app.whenReady().then(() => {
   const reply = (work) => work.then((result) => ({ result }), (err) => ({ error: err.message }));
   ipcMain.handle('wifi:list', () => reply(wifi.list()));
   const wifiChanged = () => { requestBackup('wifi'); return sendStatus(); };
-  ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(wifi.connect(ssid, password).then(wifiChanged)));
-  ipcMain.handle('wifi:forget', (_e, ssid) => reply(wifi.forget(ssid).then(wifiChanged)));
+  // The password is never logged.
+  const noted = (what, work) => work.then((result) => { log('wifi', what); return result; }, (err) => { log('wifi', `${what}: FAILED: ${err.message}`); throw err; });
+  ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(noted(`join ${ssid}`, wifi.connect(ssid, password)).then(wifiChanged)));
+  ipcMain.handle('wifi:forget', (_e, ssid) => reply(noted(`forget ${ssid}`, wifi.forget(ssid)).then(wifiChanged)));
+  ipcMain.handle('log:read', () => log.read());
   ipcMain.handle('home:get', () => homeInfo());
   ipcMain.handle('home:set', () => reply(Promise.resolve().then(setHomeToGps)));
-  ipcMain.handle('home:postcode', (_e, text) => reply(setHomeToPostcode(text)));
+  ipcMain.handle('home:postcode', (_e, text) => reply(setHomeToPostcode(text).catch((err) => { log('location', `postcode lookup failed: ${err.message}`); throw err; })));
   ipcMain.handle('home:useGps', () => reply(Promise.resolve().then(useGpsNow)));
   ipcMain.handle('home:feedWait', (_e, value) => setFeedRequiresGps(value));
   ipcMain.handle('display:get', () => ({ ...display.get(), storageRestored: storageRestored() }));
   ipcMain.handle('display:set', (_e, patch) => {
     const before = localUrl();
     const result = display.update(patch || {});
+    log('settings', 'changed:', patch || {});
     requestBackup('settings');
     bar.webContents.send('theme', result.theme); // the settings page restyles itself; the tab bar is told here
     if (localUrl() !== before) { // reload the local map with its new style or extras

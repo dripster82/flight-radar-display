@@ -24,7 +24,7 @@ passed=0; failed=0
 
 close_storage() {
   umount "$NM" 2>/dev/null
-  for area in settings wifi browser; do umount "$ROOT/$area" 2>/dev/null; done
+  for area in settings wifi browser cache log; do umount "$ROOT/$area" 2>/dev/null; done
   umount "$PEEK" 2>/dev/null
 }
 trap 'close_storage; rm -rf "$BOX"' EXIT
@@ -33,6 +33,7 @@ mkdir -p "$STORE" "$ROOT" "$NM" "$PEEK" "$DEFAULTS/settings" "$DEFAULTS/wifi" "$
 cat > "$CONF" <<EOF
 STORE=$STORE
 AREAS="settings:8 wifi:8 browser:8"
+PLAIN_AREAS="cache:8 log:8"
 ROOT=$ROOT
 DEFAULTS=$DEFAULTS
 NM_DIR=$NM
@@ -176,6 +177,21 @@ check "settings and Wi-Fi were not affected" is "$(theme) $(networks)" "day Home
 
 section "13. Every backup written was checked first"
 check "the log shows backups written and checked" log_says "written and checked"
+
+section "14. The web cache and the log: kept across restarts, no backups, remade empty if wrecked"
+start_up
+check "the cache area is open and writable" sh -c "echo page > '$ROOT/cache/data/page'"
+check "the log area is open and writable" sh -c "echo line > '$ROOT/log/data/flight-radar.log'"
+check "neither has a backup" sh -c "! ls '$STORE' | grep -Eq '^(cache|log)-backup'"
+check "asking for a backup of the cache is refused" sh -c "! FLIGHT_RADAR_CONF='$CONF' '$SCRIPT' backup cache"
+start_up
+check "the cache is still there after a restart" is "$(cat "$ROOT/cache/data/page" 2>/dev/null)" page
+check "the log is still there after a restart" is "$(cat "$ROOT/log/data/flight-radar.log" 2>/dev/null)" line
+close_storage; wreck "$STORE/cache.img"; start_up
+check "a wrecked cache comes back empty and writable" sh -c "[ ! -e '$ROOT/cache/data/page' ] && touch '$ROOT/cache/data/again'"
+check "the log was not affected" is "$(cat "$ROOT/log/data/flight-radar.log" 2>/dev/null)" line
+check "no restore note is raised for it" sh -c "[ ! -s '$NOTE' ]"
+check "settings were not affected" is "$(theme)" day
 
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ] || { echo "Log of what the storage script reported:"; sed 's/^/  /' "$LOG"; }
