@@ -19,6 +19,10 @@ if command -v wlr-randr >/dev/null; then
   [ -n "$screen" ] && wlr-randr --output "$screen" --transform "$transform"
 fi
 
+# The desktop's own panel and wallpaper start alongside this script and would be on show until the
+# app is up, so they are closed (lwrespawn is what would bring them straight back).
+pkill -f lwrespawn; pkill -f wf-panel-pi; pkill -f 'pcmanfm.*--desktop'
+
 while true; do
   KIOSK=1 "$REPO/vendor/electron/electron" "$REPO" --ozone-platform-hint=auto
   sleep 2

@@ -132,8 +132,11 @@ function forgetMapExtras(wc) {
   wc.executeJavaScript(`(() => { let had = false; for (const key of ${JSON.stringify(keys)}) { if (localStorage.getItem(key) !== null) { localStorage.removeItem(key); had = true; } } if (had) location.reload(); })()`).catch(() => {});
 }
 
+// True when the receiver is on this machine (not a stand-in map on the internet, as in development).
+const RECEIVER_IS_HERE = Boolean(process.env.READSB_SET_LOCATION) || ['localhost', '127.0.0.1'].includes(new URL(config.localRadarUrl).hostname);
 const tabs = {
-  local: { url: config.localRadarUrl, onLoad: (wc) => { hideMapButtons(wc); forgetMapExtras(wc); addRadarScope(wc); } },
+  // With no position yet (a new device before a postcode or a GPS fix) the map has nowhere to centre, so a notice is shown instead.
+  local: { url: config.localRadarUrl, notice: () => (RECEIVER_IS_HERE && !current ? 'nolocation.html' : null), onLoad: (wc) => { hideMapButtons(wc); forgetMapExtras(wc); addRadarScope(wc); } },
   // A named persistent partition keeps the FR24 login across restarts.
   fr24: { url: config.fr24Url, partition: 'persist:fr24' },
   // Our own settings page (Wi-Fi and brightness); only pages with `file` get the preload bridge.
@@ -251,9 +254,10 @@ function createTab(tab) {
     wc.setZoomFactor(ZOOM); // zoom is per site, so set it on every load
     if (tab.onLoad) tab.onLoad(wc);
   });
-  tab.load = () => (tab.file
-    ? wc.loadFile(path.join(__dirname, tab.file))
-    : wc.loadURL(tab.url).catch(() => {})); // failures are handled by did-fail-load
+  tab.load = () => {
+    const file = tab.file || (tab.notice && tab.notice());
+    return file ? wc.loadFile(path.join(__dirname, file)) : wc.loadURL(tab.url).catch(() => {}); // failures are handled by did-fail-load
+  };
   wc.on('did-start-navigation', (details) => { if (details.isMainFrame && !details.isSameDocument && typingInto === wc) hideKeyboard(); });
   // The tab bar offers a way back while a web tab is showing some other site (see tabbar.html).
   if (!tab.file) for (const event of ['did-navigate', 'did-navigate-in-page']) wc.on(event, () => reportAway(tab));
@@ -299,7 +303,6 @@ function homeInfo() {
 }
 
 // Tells the decoder where the receiver is. This restarts the decoder, so the map is empty for a few seconds.
-const RECEIVER_IS_HERE = Boolean(process.env.READSB_SET_LOCATION) || ['localhost', '127.0.0.1'].includes(new URL(config.localRadarUrl).hostname);
 function setReceiverLocation({ latitude, longitude }) {
   const command = process.env.READSB_SET_LOCATION; // dev stand-in
   const [file, args] = command

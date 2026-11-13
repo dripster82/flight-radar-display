@@ -5,6 +5,7 @@
   "rangeRings": [20, 50, 100, 200],
   "startTab": "local",
   "welcome": { "title": "Merry Christmas My Love", "message": "Hope this will help you keep spotting those planes." },
+  "home": { "latitude": 54.2100, "longitude": -0.2890 },
   "awayKm": 3.2,
   "feedRequiresGps": true,
   "night": { "from": "22:00", "to": "07:00", "brightness": 15 },

@@ -130,11 +130,16 @@ fi
 step "Start-up screen"
 # A plain splash while the system starts, in place of scrolling text. The panel is portrait, and the
 # splash is drawn before anything can rotate the picture, so a copy of the image already turned
-# to match is used: splashRotation in config.json if set, otherwise screenRotation.
+# to match is used: splashRotation in config.json if set, otherwise the opposite turn to
+# screenRotation (the desktop turns the picture anticlockwise, the image files are turned clockwise;
+# using screenRotation itself put the splash upside down on the real screen).
 set_splash=/usr/sbin/plymouth-set-default-theme   # not on an ordinary user's path
 if [ -x "$set_splash" ]; then
   rotation="$(sed -n 's/.*"splashRotation": *\([0-9]*\).*/\1/p' "$REPO/config.json")"
-  [ -n "$rotation" ] || rotation="$(sed -n 's/.*"screenRotation": *\([0-9]*\).*/\1/p' "$REPO/config.json")"
+  if [ -z "$rotation" ]; then
+    turned="$(sed -n 's/.*"screenRotation": *\([0-9]*\).*/\1/p' "$REPO/config.json")"
+    rotation=$(( (360 - ${turned:-0}) % 360 ))
+  fi
   image="$REPO/assets/splash-${rotation:-0}.png"
   [ -f "$image" ] || image="$REPO/assets/splash-0.png"
   splash_dir=/usr/share/plymouth/themes/flight-radar
