@@ -120,7 +120,8 @@ function addRadarScope(wc) {
   const radarConfig = { rings: config.rangeRings || [], ringUnit: UNIT_LABEL[unit], metresPerUnit: UNIT_METRES[unit] };
   const outlines = fs.readFileSync(path.join(__dirname, 'outlines.json'), 'utf8');
   const script = fs.readFileSync(path.join(__dirname, 'radar-scope.js'), 'utf8');
-  wc.executeJavaScript(`window.__radarOutlines = ${outlines}; window.__radarConfig = ${JSON.stringify(radarConfig)};\n${script}`).catch(() => {});
+  const places = fs.readFileSync(path.join(__dirname, 'places.json'), 'utf8');
+  wc.executeJavaScript(`window.__radarOutlines = ${outlines}; window.__radarPlaces = ${places}; window.__radarConfig = ${JSON.stringify(radarConfig)};\n${script}`).catch(() => {});
 }
 
 // Settings decides which extras the local map shows. The map also keeps its own memory of some of

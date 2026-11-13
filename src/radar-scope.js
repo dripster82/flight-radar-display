@@ -4,7 +4,12 @@
 // full brightness as the sweep passes over it, then fades to 5% before the next pass.
 // The sweep is decoration: the receiver hears every aircraft all the time.
 // Inputs set by main.js before this runs: window.__radarOutlines ({coast, borders} as flat
-// [lon, lat, lon, lat, ...] lines) and window.__radarConfig ({rings, ringUnit, metresPerUnit}).
+// [lon, lat, lon, lat, ...] lines), window.__radarPlaces ({cities, airports, military} as
+// [label, lon, lat, rank]) and window.__radarConfig ({rings, ringUnit, metresPerUnit}).
+// Cities are drawn as small squares, airports as crossed circles and military airfields as amber
+// diamonds, each with its name; they
+// brighten with the sweep like the outlines. Fewer are shown zoomed out, and a name that would
+// overlap one already placed is left out.
 (() => {
   if (window.__radarScope) return;
   window.__radarScope = true;
@@ -14,6 +19,7 @@
   const FADE_TO = 0.05;          // how dim the outline gets just before the sweep comes round again
   const FRAME_MS = 33;           // about 30 frames a second, to go easy on the Pi
   const GREEN = '57, 255, 122';
+  const AMBER = '255, 176, 0'; // military airfields
   const R = 6378137;             // web-mercator earth radius, metres
 
   const mercator = (lon, lat) => [(lon * Math.PI / 180) * R, Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI / 180) / 2)) * R];
@@ -38,6 +44,12 @@
   function start() {
     const coast = prepare(window.__radarOutlines.coast);
     const borders = prepare(window.__radarOutlines.borders);
+    const placeList = [];
+    for (const kind of ['airports', 'military', 'cities']) {
+      for (const [label, lon, lat, rank] of (window.__radarPlaces || {})[kind] || []) placeList.push({ kind, label, rank, at: mercator(lon, lat) });
+    }
+    placeList.sort((a, b) => a.rank - b.rank); // the most important claim their label space first
+    const LABEL_FONT = '11px ui-monospace, monospace';
     const config = window.__radarConfig || {};
     const viewport = OLMap.getViewport();
     viewport.style.background = '#000';
@@ -62,7 +74,7 @@
     const startCentre = OLMap.getView().getCenter();
     const site = () => (typeof SiteLat === 'number' && typeof SiteLon === 'number' ? mercator(SiteLon, SiteLat) : startCentre);
 
-    let viewKey = '', sectors = [], dimSectors = [], rings = [], sitePx = [0, 0], reach = 0;
+    let viewKey = '', sectors = [], dimSectors = [], rings = [], places = [], sitePx = [0, 0], reach = 0;
 
     // Rebuilt only when the map is moved, zoomed or resized: every on-screen piece of outline is
     // sorted into the slice of the circle it lies in, as seen from the receiver.
@@ -109,6 +121,22 @@
       sectors = bucket(coast);
       dimSectors = bucket(borders);
 
+      // Cities and airports on screen. Zoomed out, only the more important ones are kept.
+      const maxRank = res > 2500 ? 1 : res > 1000 ? 2 : 3;
+      const taken = [];
+      places = [];
+      ctx.font = LABEL_FONT;
+      for (const place of placeList) {
+        if (place.rank > maxRank) continue;
+        const [x, y] = px(...place.at);
+        if (x < 0 || x > width || y < 0 || y > height) continue;
+        const box = [x - 6, y - 9, x + 9 + ctx.measureText(place.label).width, y + 7];
+        if (taken.some((t) => box[0] < t[2] && box[2] > t[0] && box[1] < t[3] && box[3] > t[1])) continue;
+        taken.push(box);
+        const bearing = Math.atan2(x - sitePx[0], sitePx[1] - y);
+        places.push({ ...place, x, y, sector: Math.floor(((bearing + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI) * SECTORS) % SECTORS });
+      }
+
       // Ring radius on screen: true distance, stretched by the map projection at the receiver's latitude.
       const siteLat = 2 * Math.atan(Math.exp(site()[1] / R)) - Math.PI / 2;
       rings = (config.rings || []).map((distance) => ({
@@ -140,11 +168,33 @@
         if (dimSectors[i]) { ctx.strokeStyle = `rgba(${GREEN}, ${glow(i) * 0.45})`; ctx.stroke(dimSectors[i]); }
       }
 
+      // Cities (squares), airports (crossed circles) and military airfields (amber diamonds).
+      ctx.lineWidth = 1;
+      ctx.font = LABEL_FONT;
+      ctx.textAlign = 'left';
+      for (const place of places) {
+        const alpha = 0.35 + 0.65 * glow(place.sector);
+        ctx.strokeStyle = ctx.fillStyle = `rgba(${place.kind === 'military' ? AMBER : GREEN}, ${alpha})`;
+        ctx.beginPath();
+        if (place.kind === 'military') {
+          ctx.moveTo(place.x, place.y - 5); ctx.lineTo(place.x + 5, place.y); ctx.lineTo(place.x, place.y + 5); ctx.lineTo(place.x - 5, place.y);
+          ctx.closePath();
+        } else if (place.kind === 'airports') {
+          ctx.arc(place.x, place.y, 4, 0, 2 * Math.PI);
+          ctx.moveTo(place.x - 6, place.y); ctx.lineTo(place.x + 6, place.y);
+          ctx.moveTo(place.x, place.y - 6); ctx.lineTo(place.x, place.y + 6);
+        } else {
+          ctx.rect(place.x - 2.5, place.y - 2.5, 5, 5);
+        }
+        ctx.stroke();
+        ctx.fillText(place.label, place.x + 9, place.y + 4);
+      }
+
       // Range rings and their labels.
       ctx.lineWidth = 1;
       ctx.strokeStyle = `rgba(${GREEN}, 0.35)`;
       ctx.fillStyle = `rgba(${GREEN}, 0.75)`;
-      ctx.font = '11px ui-monospace, monospace';
+      ctx.font = LABEL_FONT;
       ctx.textAlign = 'center';
       for (const ring of rings) {
         ctx.beginPath(); ctx.arc(sitePx[0], sitePx[1], ring.radius, 0, 2 * Math.PI); ctx.stroke();

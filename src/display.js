@@ -31,7 +31,7 @@ const MAP_OPTIONS = [
   { id: 'trails', name: 'Trails', query: 'allTracks' },                       // the path each aircraft has flown
   { id: 'large', name: 'Larger aircraft', query: 'iconScale=1.6&labelScale=1.3' },
 ];
-let settings = { brightness: 100, nightDim: true, theme: 'navy', mapStyle: 'standard', mapOptions: {}, welcomeShown: false };
+let settings = { brightness: 100, nightDim: true, theme: 'navy', mapStyle: 'radar', mapOptions: {}, welcomeShown: false };
 
 function backlight() {
   try {
@@ -86,7 +86,7 @@ function init(config, dataDir) {
   night = config.night;
   try { settings = { ...settings, ...JSON.parse(fs.readFileSync(settingsFile, 'utf8')) }; } catch { /* first run */ }
   if (!THEMES.some((theme) => theme.id === settings.theme)) settings.theme = 'navy';
-  if (!MAP_STYLES.some((style) => style.id === settings.mapStyle)) settings.mapStyle = 'standard';
+  if (!MAP_STYLES.some((style) => style.id === settings.mapStyle)) settings.mapStyle = 'radar';
   if (!settings.mapOptions || typeof settings.mapOptions !== 'object') settings.mapOptions = {};
   apply();
   setInterval(apply, 60000); // picks up the start and end of the night hours

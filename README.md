@@ -129,7 +129,7 @@ shows what is in force.
   is not present.
 - **Themes**: five colour themes (Navy, Graphite, Forest, Day, Amber) chosen in Settings. They
   restyle the tab bar and Settings; the two map pages are web sites and keep their own look.
-- **Local map styles**: Standard, Dark, Satellite, and Radar scope, chosen in Settings. Radar scope
+- **Local map styles**: Radar scope (the default), Standard, Dark and Satellite, chosen in Settings. Radar scope
   replaces the map with a green wireframe of coastlines and borders on black, range rings, and a
   rotating sweep that lights each stretch of outline as it passes. The sweep is decoration: the
   receiver hears every aircraft continuously. Outline data: Natural Earth 1:50m (public domain).
