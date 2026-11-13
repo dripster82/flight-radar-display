@@ -122,6 +122,7 @@ sudo reboot
 
 | Check | Command | Expected | If it fails |
 |---|---|---|---|
+| Update from the screen | Settings > **Check for updates**, then **Update now** twice when one is offered | "Updating…", then it restarts by itself and the Updates row shows the new version and "Update finished" | Settings > View log, the `update` lines; `cat /boot/firmware/flight-radar-update.log` |
 | One-command update | `scripts/update.sh` | Restarts twice by itself and ends protected, on the new version, with settings, Wi-Fi and sign-in kept | `cat /boot/firmware/flight-radar-update.log` |
 
 ## 9. Flightradar24 feeder — last, and only when you are ready
@@ -142,7 +143,8 @@ scripts/install-fr24.sh
 
 ## Passwordless sudo
 
-The app uses `sudo` without a password for three things: starting and stopping the feeder,
-requesting a backup after a change, and setting the receiver's position. Raspberry Pi OS allows
+The app uses `sudo` without a password for four things: starting and stopping the feeder,
+requesting a backup after a change, setting the receiver's position, and installing an update
+from Settings. Raspberry Pi OS allows
 this for the first user by default. If `sudo -n true` asks for a password, it has been switched
-off, and those three will silently do nothing.
+off, and those four will silently do nothing.

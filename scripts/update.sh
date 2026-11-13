@@ -4,6 +4,7 @@
 #   scripts/update.sh
 #
 # Run as the desktop user (over SSH is fine; the connection drops when the device restarts).
+# Settings > Update now runs this same script (src/update.js).
 #
 # With power-cut protection on, the system is read-only, so an update cannot simply be installed.
 # This script does the whole sequence by itself:

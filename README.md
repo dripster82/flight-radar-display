@@ -114,6 +114,13 @@ has no clock battery, so lines written before it has reached the internet can ca
 
 ## Updating
 
+On the device: Settings, near the bottom, **Check for updates** (needs Wi-Fi). If there is a newer
+version it says what changed and offers **Update now**, which needs a second tap. The device then
+updates and restarts by itself; leave it plugged in. Afterwards the same row shows the version
+running and how the last update ended.
+
+The buttons run the same script as doing it over SSH:
+
 ```sh
 scripts/update.sh
 ```

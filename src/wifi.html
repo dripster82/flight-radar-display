@@ -56,6 +56,8 @@
   .choices .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
   .choices .action.confirm { background: var(--danger); color: #ffffff; }
   #diagnostics { padding-bottom: 12px; }
+  #updateText { white-space: normal; }
+  #updates .action.confirm { background: var(--danger); color: #ffffff; }
   #logView { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: var(--bg); }
   #logLines { flex: 1; margin: 0; padding: 0 12px 12px; overflow: auto; user-select: text;
               font: 12px/1.5 ui-monospace, monospace; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -109,6 +111,12 @@
   </header>
   <div id="status" role="status"></div>
   <ul id="networks"></ul>
+  <div id="updates" class="where">
+    <span class="label">Updates</span>
+    <span id="updateText" class="text"></span>
+    <button class="action" id="updateCheck">Check for updates</button>
+    <button class="action primary" id="updateStart" hidden>Update now</button>
+  </div>
   <div id="diagnostics" class="choices">
     <span class="label">Diagnostics</span>
     <button class="action" id="logShow">View log</button>
@@ -137,7 +145,7 @@
     $('display').hidden = !screen || !screen.available || Boolean(target);
     for (const id of ['themes', 'mapStyles', 'mapOptions', 'fr24']) $(id).hidden = !screen || Boolean(target);
     $('welcome').hidden = !hasWelcome || Boolean(target);
-    $('diagnostics').hidden = Boolean(target);
+    $('diagnostics').hidden = $('updates').hidden = Boolean(target);
     if (!screen) return;
     document.documentElement.dataset.theme = screen.theme;
     // One button per choice; the current one is highlighted.
@@ -364,6 +372,36 @@
   // Only offered when config.json has a welcome title or message.
   window.radar.welcomeGet().then((text) => { hasWelcome = Boolean(text.title || text.message); $('welcome').hidden = !hasWelcome || Boolean(target); });
   $('welcomeShow').addEventListener('click', () => window.radar.welcomeShow());
+  // Updates (src/update.js). Checking needs Wi-Fi. Installing needs a second tap, because it
+  // restarts the app (and, with power-cut protection on, the whole device, twice).
+  let updating = false, updateConfirm = null;
+  const version = (info) => `This version: ${info.current}${info.lastUpdate ? ` · last update: ${info.lastUpdate.replace(/^\S+ \S+ /, '')}` : ''}`;
+  const endUpdateConfirm = () => { clearTimeout(updateConfirm); updateConfirm = null; $('updateStart').classList.remove('confirm'); $('updateStart').textContent = 'Update now'; };
+  window.radar.updateInfo().then((info) => { $('updateText').textContent = version(info); });
+  $('updateCheck').addEventListener('click', async () => {
+    if (updating) return;
+    endUpdateConfirm();
+    $('updateStart').hidden = true;
+    $('updateText').textContent = 'Checking…';
+    const { result, error } = await window.radar.updateCheck();
+    if (error) return void ($('updateText').textContent = error);
+    $('updateText').textContent = result.behind ? `Update available (${result.behind} change${result.behind === 1 ? '' : 's'}): ${result.latest}` : `Up to date. ${version(result)}`;
+    $('updateStart').hidden = !result.behind || !result.canUpdate;
+  });
+  $('updateStart').addEventListener('click', async () => {
+    if (updating) return;
+    if (!updateConfirm) {
+      $('updateStart').classList.add('confirm'); $('updateStart').textContent = 'Tap again to update';
+      updateConfirm = setTimeout(endUpdateConfirm, 4000);
+      return;
+    }
+    endUpdateConfirm();
+    const { error } = await window.radar.updateStart();
+    if (error) return void ($('updateText').textContent = error);
+    updating = true;
+    $('updateStart').hidden = $('updateCheck').hidden = true;
+    $('updateText').textContent = 'Updating. Leave it plugged in: it restarts by itself when done, which takes several minutes.';
+  });
   // The diagnostic log (src/log.js): the most recent lines, newest first. Trouble is picked out in red.
   async function drawLog() {
     const lines = await window.radar.logRead();

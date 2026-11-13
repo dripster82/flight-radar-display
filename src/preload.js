@@ -23,6 +23,9 @@ contextBridge.exposeInMainWorld('radar', {
   welcomeShow: () => ipcRenderer.send('welcome:show'),
   welcomeDone: () => ipcRenderer.send('welcome:done'),
   logRead: () => ipcRenderer.invoke('log:read'),
+  updateInfo: () => ipcRenderer.invoke('update:info'),
+  updateCheck: () => ipcRenderer.invoke('update:check'),
+  updateStart: () => ipcRenderer.invoke('update:start'),
 });
 
 // The colour theme is set on <html> before the page draws, and updated live when it is changed in Settings.

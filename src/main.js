@@ -11,6 +11,7 @@ const feed = require('./feed');
 const display = require('./display');
 const location = require('./location');
 const log = require('./log');
+const update = require('./update');
 
 // With power-cut protection on, the system is read-only and the app's data lives in separate
 // writable storage areas (see scripts/data-area.sh): the browser's data, which holds the
@@ -658,6 +659,11 @@ app.whenReady().then(() => {
   ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(noted(`join ${ssid}`, wifi.connect(ssid, password)).then(wifiChanged)));
   ipcMain.handle('wifi:forget', (_e, ssid) => reply(noted(`forget ${ssid}`, wifi.forget(ssid)).then(wifiChanged)));
   ipcMain.handle('log:read', () => log.read());
+  ipcMain.handle('update:info', () => update.info());
+  ipcMain.handle('update:check', () => reply(update.check().then(
+    (found) => { log('update', found.behind ? `${found.behind} change${found.behind === 1 ? '' : 's'} available; newest: ${found.latest}` : `checked: up to date (${found.current})`); return found; },
+    (err) => { log('update', `check FAILED: ${err.message}`); throw err; })));
+  ipcMain.handle('update:start', () => reply(Promise.resolve().then(() => { log('update', 'update started from Settings; the app will be restarted by it'); update.start(); })));
   ipcMain.handle('home:get', () => homeInfo());
   ipcMain.handle('home:set', () => reply(Promise.resolve().then(setHomeToGps)));
   ipcMain.handle('home:postcode', (_e, text) => reply(setHomeToPostcode(text).catch((err) => { log('location', `postcode lookup failed: ${err.message}`); throw err; })));
