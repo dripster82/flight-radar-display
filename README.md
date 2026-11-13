@@ -15,7 +15,7 @@ npm start
 With no receiver, the first tab shows a "not available yet" notice. To see a live map instead:
 
 ```sh
-npm run start:test     # the public map at globe.adsb.lol stands in for the receiver, with a set home location
+npm run start:test     # the public map at globe.adsb.lol stands in for the receiver, with a set home location (York)
 npm run start:fresh    # the same, from an empty data folder: no settings or sign-in, as on a first start
 ```
 
@@ -25,11 +25,12 @@ Raspberry Pi OS 64-bit Desktop, logged in as the desktop user, SDR and GPS plugg
 
 ```sh
 git clone https://github.com/dripster82/flight-radar-display.git ~/flight-radar && cd ~/flight-radar
-scripts/install.sh 51.5000 -0.1000   # home latitude and longitude (optional)
+scripts/install.sh
 sudo reboot
 ```
 
-The app then starts full screen on every boot and restarts itself if it crashes.
+The app then starts full screen on every boot and restarts itself if it crashes. Set the home
+position in Settings, from a postcode or from the GPS.
 
 Flightradar24 feeding is a separate, deliberate step because it registers the receiver
 and emails the account holder:
@@ -134,8 +135,15 @@ shows what is in force.
   receiver hears every aircraft continuously. Outline data: Natural Earth 1:50m (public domain).
 - **Map extras**: three switches in Settings (**Map shows**) add callsign labels, the trail each
   aircraft has flown, and larger aircraft symbols to the local map.
-- **Settings**: home position (reset it to the GPS position after moving house), whether the
-  feed waits for GPS, screen brightness, night dimming, and Wi-Fi (join with the on-screen keyboard,
+- **Location**: **Home** is a pin, set in Settings from a UK postcode (looked up once over Wi-Fi at
+  postcodes.io) or from the GPS position. While the GPS is within 2 miles of the pin, the pin itself
+  is the position used for the map centre, range rings and "my location", so nothing drifts at
+  home. Further away, the GPS position is used and held still; it only moves on once the GPS is more
+  than 2 miles from the held position. **Use GPS position now** takes the GPS position at once
+  while away (on holiday, say) without moving the home pin. With no GPS fix the last position stays
+  in use. Each move restarts the decoder, and the local map shows "Repositioning, locating
+  aircraft…" for a few seconds.
+- **Settings**: the home pin and location, whether the feed waits for GPS, screen brightness, night dimming, and Wi-Fi (join with the on-screen keyboard,
   rejoin a saved network with one tap, or forget one).
 
 ## Settings file
@@ -148,8 +156,8 @@ shows what is in force.
 | `distanceUnits` | `km`, `miles` or `nautical`: the unit for distances on the local map, including the range rings. Altitude stays in feet and speed in knots. |
 | `rangeRings` | Distances, in `distanceUnits`, of the range rings drawn around the receiver on the local map. |
 | `startTab` | `local` or `fr24`. |
-| `home` | Home coordinates. Settings > **Set home to GPS position** replaces this on the device (saved in the app's data folder, not this file); use it after moving house, once the location has been changed on the Flightradar24 website. Used for FR24's "my location" button when there is no GPS fix, and to decide when the device is away. With no GPS and no `home`, that button cannot work. |
-| `awayKm` | How far from `home` (in km) still counts as at home; 5 by default. The Flightradar24 feeder is registered at a fixed location, so it only uploads from there. |
+| `home` | Optional starting home pin (`latitude`, `longitude`); left out by default. Settings > **Set by postcode** or **Set home to GPS position** sets it on the device (saved in the app's data folder, not this file). After moving house, change the location on the Flightradar24 website first. |
+| `awayKm` | The location radius in km; 3.2 (2 miles) by default. Within it of the home pin counts as at home, and away from home the position only follows the GPS once it has moved further than this. The Flightradar24 feeder is registered at a fixed location, so it only uploads at home. |
 | `feedRequiresGps` | The starting value of the **Feed waits for GPS** switch in Settings; the switch then overrides it on the device. On: after boot the feeder stays off until five GPS fixes in a row place the device within `awayKm` of `home`, and it is stopped again if GPS places it further away. Off: the feeder starts at boot without waiting, and is still stopped if GPS shows the device is away. Turn it off if the GPS cannot get a fix where the device lives, or it will never feed. |
 | `night` | Hours during which the screen dims to `brightness` percent, when night dimming is on. |
 | `zoom` | 1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen. |

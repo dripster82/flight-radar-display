@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('radar', {
   wifiForget: (ssid) => ipcRenderer.invoke('wifi:forget', ssid),
   homeGet: () => ipcRenderer.invoke('home:get'),
   homeSet: () => ipcRenderer.invoke('home:set'),
+  homePostcode: (text) => ipcRenderer.invoke('home:postcode', text),
+  homeUseGps: () => ipcRenderer.invoke('home:useGps'),
   homeFeedWait: (value) => ipcRenderer.invoke('home:feedWait', value),
   displayGet: () => ipcRenderer.invoke('display:get'),
   displaySet: (patch) => ipcRenderer.invoke('display:set', patch),

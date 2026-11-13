@@ -36,20 +36,20 @@
   #display .action { min-width: 48px; }
   #display .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-  #home { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
-  #home .label { color: var(--strong); font-weight: 600; font-size: 18px; }
-  #home #homeText { flex: 1; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #home .action:disabled { opacity: .45; }
-  #home .action.confirm { background: var(--danger); color: #ffffff; }
-  #home .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
-  #home .action { white-space: nowrap; }
+  .where { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
+  .where .label { color: var(--strong); font-weight: 600; font-size: 18px; }
+  .where .text { flex: 1; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .where .action:disabled { opacity: .45; }
+  .where .action.confirm { background: var(--danger); color: #ffffff; }
+  .where .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .where .action { white-space: nowrap; }
 
   #entry { flex: 1; display: flex; flex-direction: column; }
   #keys { padding: 0 5px 5px; }
   #password { margin: 0 12px 8px; padding: 0 12px; height: 44px; line-height: 42px; border-radius: 8px;
               background: var(--panel); color: var(--strong); font: 20px ui-monospace, monospace;
               white-space: pre; overflow: hidden; direction: rtl; text-align: left; }
-  #password:empty::before { content: 'Password'; color: var(--muted); font-family: var(--font); }
+  #password:empty::before { content: attr(data-hint); color: var(--muted); font-family: var(--font); }
   #restored { white-space: pre-line; margin: 8px 12px 0; padding: 10px 12px; border-radius: 8px; background: var(--danger); color: #ffffff; font-size: 15px; }
   .choices { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
   .choices .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
@@ -65,11 +65,17 @@
     <button class="action" id="brighter" aria-label="Brighter">+</button>
     <button class="action" id="nightDim"></button>
   </div>
-  <div id="home">
+  <div id="home" class="where">
     <span class="label">Home</span>
-    <span id="homeText"></span>
-    <button class="action" id="feedWait"></button>
+    <span id="homeText" class="text"></span>
+    <button class="action" id="setPostcode">Set by postcode</button>
     <button class="action" id="setHome">Set home to GPS position</button>
+  </div>
+  <div id="place" class="where">
+    <span class="label">Location</span>
+    <span id="placeText" class="text"></span>
+    <button class="action" id="feedWait"></button>
+    <button class="action" id="useGps">Use GPS position now</button>
   </div>
   <div id="restored" hidden></div>
   <div id="themes" class="choices">
@@ -99,7 +105,7 @@
   <div id="status" role="status"></div>
   <ul id="networks"></ul>
   <div id="entry" hidden>
-    <div id="password" aria-label="Password"></div>
+    <div id="password" aria-label="Password" data-hint="Password"></div>
     <div id="keys"></div>
   </div>
 
@@ -108,10 +114,12 @@
   const $ = (id) => document.getElementById(id);
   let password = '', target = null, busy = false;
   let screen = null; // brightness settings; stays null where the backlight cannot be controlled
+  let hasWelcome = false;
 
   function drawDisplay() {
     $('display').hidden = !screen || !screen.available || Boolean(target);
     for (const id of ['themes', 'mapStyles', 'mapOptions', 'fr24']) $(id).hidden = !screen || Boolean(target);
+    $('welcome').hidden = !hasWelcome || Boolean(target);
     if (!screen) return;
     document.documentElement.dataset.theme = screen.theme;
     // One button per choice; the current one is highlighted.
@@ -150,14 +158,18 @@
     $('nightDim').hidden = !screen.night;
     $('nightDim').classList.toggle('on', screen.nightDim);
   }
-  // Home position: where the device lives. Resetting it to the GPS position is for after a house move.
+  // Home is the pin: where the device lives, set from a postcode or from the GPS. Location is the
+  // position in use: the pin while the GPS is within 2 miles of it, otherwise a held GPS position.
   let homeConfirm = null;
+  const coords = (p) => `${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)}`;
   function drawHome(info, note) {
-    $('home').hidden = Boolean(target);
-    const at = info.home ? `${info.home.latitude.toFixed(4)}, ${info.home.longitude.toFixed(4)}` : 'not set';
-    const gps = !info.hasGps ? 'no GPS fix' : info.distanceKm === null ? 'GPS ready' : `GPS is ${info.distanceKm < 10 ? info.distanceKm.toFixed(1) : Math.round(info.distanceKm)} km away`;
-    $('homeText').textContent = note || `${at} · ${gps}`;
+    $('home').hidden = $('place').hidden = Boolean(target);
+    $('homeText').textContent = note || (info.home ? `${info.postcode ? `${info.postcode} · ` : ''}${coords(info.home)}` : 'not set');
+    const where = info.atHome ? 'At home' : info.current ? `Away, at ${coords(info.current)}` : 'Waiting for GPS';
+    const gps = !info.hasGps ? 'no GPS fix' : info.distanceKm === null ? 'GPS ready' : `GPS is ${info.distanceKm < 10 ? info.distanceKm.toFixed(1) : Math.round(info.distanceKm)} km from here`;
+    $('placeText').textContent = `${where} · ${gps}`;
     $('setHome').disabled = !info.hasGps;
+    $('useGps').disabled = !info.hasGps || info.atHome; // at home the pin is used, so there is nothing to fix
     $('feedWait').textContent = `Feed waits for GPS: ${info.feedRequiresGps ? 'On' : 'Off'}`;
     $('feedWait').classList.toggle('on', info.feedRequiresGps);
     $('feedWait').dataset.on = info.feedRequiresGps ? '1' : '';
@@ -179,7 +191,8 @@
     target = null;
     $('title').textContent = 'Wi-Fi networks';
     for (const [id, hidden] of [['networks', false], ['refresh', false], ['entry', true], ['cancel', true], ['join', true]]) $(id).hidden = hidden;
-    $('home').hidden = false;
+    $('home').hidden = $('place').hidden = false;
+    $('join').textContent = 'Join';
     drawDisplay();
   }
 
@@ -187,12 +200,15 @@
     target = network; password = '';
     $('title').textContent = network.ssid;
     for (const [id, hidden] of [['networks', true], ['refresh', true], ['entry', false], ['cancel', false], ['join', false]]) $(id).hidden = hidden;
-    $('home').hidden = true;
+    $('home').hidden = $('place').hidden = true;
+    $('join').textContent = network.postcode ? 'Set' : 'Join';
+    $('password').dataset.hint = network.postcode ? 'Postcode' : 'Password';
     keyboard.reset(); drawPassword(); drawDisplay();
   }
 
   const keyboard = onScreenKeyboard($('keys'), {
-    onType: (ch) => { if (password.length < 63) password += ch; drawPassword(); }, // WPA passwords are at most 63 characters
+    // WPA passwords are at most 63 characters; a postcode is at most 8 with its space, and is shown in capitals.
+    onType: (ch) => { if (password.length < (target.postcode ? 8 : 63)) password += target.postcode ? ch.toUpperCase() : ch; drawPassword(); },
     onDelete: () => { password = password.slice(0, -1); drawPassword(); },
     onEnter: () => $('join').click(),
   });
@@ -200,7 +216,7 @@
   // Shown in the clear: on a touchscreen with no keyboard, seeing what was typed matters more than hiding it.
   function drawPassword() {
     $('password').textContent = password;
-    setStatus('Enter the password, then Join.'); // typing clears any earlier error
+    setStatus(target.postcode ? 'Enter the home postcode, then Set. This needs Wi-Fi.' : 'Enter the password, then Join.'); // typing clears any earlier error
   }
 
   async function refresh() {
@@ -275,6 +291,7 @@
   $('refresh').addEventListener('click', refresh);
   $('cancel').addEventListener('click', () => { if (!busy) { showList(); setStatus(''); } });
   $('join').addEventListener('click', () => {
+    if (target.postcode) return setPostcode();
     if (password.length < 8) return setStatus('Wi-Fi passwords are at least 8 characters.', true);
     join(target, password);
   });
@@ -291,7 +308,26 @@
     endHomeConfirm();
     const { result, error } = await window.radar.homeSet();
     if (error) return drawHome(await window.radar.homeGet(), error);
-    drawHome(result, result.receiverUpdated ? 'Home updated to the GPS position.' : 'Home updated, but the receiver\'s own location could not be changed.');
+    drawHome(result, 'Home updated to the GPS position.');
+  });
+  // The home pin from a postcode, typed on the same keyboard screen as a Wi-Fi password.
+  $('setPostcode').addEventListener('click', () => showEntry({ postcode: true, ssid: 'Home postcode' }));
+  async function setPostcode() {
+    if (busy) return;
+    busy = true;
+    setStatus('Looking up the postcode…');
+    const { result, error } = await window.radar.homePostcode(password);
+    busy = false;
+    if (error) return setStatus(error, true);
+    showList();
+    drawHome(result);
+    setStatus(`Home set to ${result.postcode}.`);
+  }
+  $('useGps').addEventListener('click', async () => {
+    const { result, error } = await window.radar.homeUseGps();
+    if (error) return setStatus(error, true);
+    drawHome(result);
+    setStatus('Location set to the GPS position.');
   });
   // For when the Flightradar24 tab is stuck (a sign-in page that will not go away, or a page outside
   // Flightradar24). Both take you to that tab. Signing out needs a second tap: it throws away the sign-in.
@@ -308,7 +344,7 @@
     window.radar.fr24SignOut();
   });
   // Only offered when config.json has a welcome title or message.
-  window.radar.welcomeGet().then((text) => { $('welcome').hidden = !(text.title || text.message); });
+  window.radar.welcomeGet().then((text) => { hasWelcome = Boolean(text.title || text.message); $('welcome').hidden = !hasWelcome || Boolean(target); });
   $('welcomeShow').addEventListener('click', () => window.radar.welcomeShow());
   $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
   refreshHome();

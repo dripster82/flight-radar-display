@@ -39,18 +39,16 @@ else
   echo "already installed"
 fi
 
-step "GPS position into the decoder"
-# readsb takes its own position from gpsd when a fix is available, so the map follows the device.
-if ! grep -q 'gpsd_in' /etc/default/readsb; then
-  sudo sed -i "s|^NET_OPTIONS=\"|NET_OPTIONS=\"$GPSD_CONNECTOR |" /etc/default/readsb
+step "Receiver position"
+# The app decides the receiver's position (the home pin, or a held GPS position when away; see
+# src/location.js) and sets it in the decoder itself. The decoder must not also follow the GPS
+# directly, or the map centre would drift, so an earlier install's GPS link is taken out.
+if grep -q 'gpsd_in' /etc/default/readsb; then
+  sudo sed -i "s|$GPSD_CONNECTOR ||" /etc/default/readsb
   sudo systemctl restart readsb
-else
-  echo "already configured"
 fi
-
 if [ $# -eq 2 ]; then
-  step "Home location (used when there is no GPS fix)"
-  sudo readsb-set-location "$1" "$2"
+  sudo readsb-set-location "$1" "$2" # a starting position, until a postcode or the GPS gives one
 fi
 
 step "Range rings and distance units on the local map"

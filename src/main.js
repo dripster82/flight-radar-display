@@ -9,6 +9,7 @@ const wifi = require('./wifi');
 const gps = require('./gps');
 const feed = require('./feed');
 const display = require('./display');
+const location = require('./location');
 
 // With power-cut protection on, the system is read-only and the app's data lives in separate
 // writable storage areas (see scripts/data-area.sh): the browser's data, which holds the
@@ -61,18 +62,17 @@ if (process.env.HOME_LOCATION) {
   const [latitude, longitude] = process.env.HOME_LOCATION.split(',').map(Number);
   config.home = { latitude, longitude };
 }
-let home = config.home && Number.isFinite(config.home.latitude) && Number.isFinite(config.home.longitude)
-  ? { latitude: config.home.latitude, longitude: config.home.longitude }
-  : null;
+let home = location.valid(config.home); // the home pin
 // Choices made on the device's Settings screen are kept in the app's data folder and replace
-// the matching values in config.json: the home position ("Set home to GPS position", used after
-// moving house) and whether the feed waits for GPS.
+// the matching values in config.json: the home pin (from a postcode, or "Set home to GPS
+// position"), the position in use, and whether the feed waits for GPS.
 const DEVICE_FILE = path.join(SETTINGS_DIR, 'location.json');
 let onDevice = {};
 try { onDevice = JSON.parse(fs.readFileSync(DEVICE_FILE, 'utf8')); } catch { /* nothing chosen on the device yet */ }
-if (!process.env.HOME_LOCATION && onDevice.home && Number.isFinite(onDevice.home.latitude) && Number.isFinite(onDevice.home.longitude)) {
-  home = onDevice.home;
-}
+if (!process.env.HOME_LOCATION && location.valid(onDevice.home)) home = location.valid(onDevice.home);
+// The position the display works from: the home pin while the GPS is near it, otherwise a held GPS
+// position (see location.js). Kept across restarts so it is right before the first GPS fix.
+let current = (!process.env.HOME_LOCATION && location.valid(onDevice.current)) || home;
 let feedRequiresGps = typeof onDevice.feedRequiresGps === 'boolean' ? onDevice.feedRequiresGps : config.feedRequiresGps !== false;
 const saveOnDevice = (patch) => {
   onDevice = { ...onDevice, ...patch };
@@ -90,7 +90,8 @@ const RETRY_MS = 5000;
 const LOCATION_EVERY_MS = 2000;
 const STATUS_EVERY_MS = 5000;
 const GPS_FRESH_MS = 15000;
-const FIXES_TO_TRUST = 5; // consecutive GPS fixes that must agree before the feeder is started or stopped
+const FIXES_TO_TRUST = 5; // consecutive GPS fixes that must agree before the feeder is started or stopped, or the position moved
+const HOME_RADIUS_KM = Number(config.awayKm) || 3.2; // about 2 miles: how near the home pin counts as at home, and how far the GPS must move before the position follows it
 const PRELOAD = path.join(__dirname, 'preload.js');
 const WEB_PRELOAD = path.join(__dirname, 'web-preload.js'); // for the web pages in the map tabs; see that file
 const KEYBOARD_HEIGHT = Math.round(206 * ZOOM);
@@ -275,7 +276,7 @@ function createTab(tab) {
 // either (the device has not moved just because the signal dropped).
 function controlFeedFromGps(position) {
   if (!home) return;
-  const away = feed.distanceKm(home, position) > (Number(config.awayKm) || 5);
+  const away = feed.distanceKm(home, position) > HOME_RADIUS_KM;
   if (away !== verdict.away) verdict = { away, count: 0 };
   if (++verdict.count < FIXES_TO_TRUST || away === feedPaused) return;
   feedPaused = away;
@@ -288,13 +289,17 @@ function homeInfo() {
   const gpsNow = freshGps();
   return {
     home,
+    postcode: onDevice.postcode || null,
+    current,
+    atHome: location.same(current, home),
     feedRequiresGps,
     hasGps: Boolean(gpsNow),
-    distanceKm: home && gpsNow ? feed.distanceKm(home, gpsNow) : null,
+    distanceKm: current && gpsNow ? feed.distanceKm(current, gpsNow) : null, // from the position in use to the GPS
   };
 }
 
-// Tells the decoder where the receiver is, for when it has no GPS fix of its own.
+// Tells the decoder where the receiver is. This restarts the decoder, so the map is empty for a few seconds.
+const RECEIVER_IS_HERE = Boolean(process.env.READSB_SET_LOCATION) || ['localhost', '127.0.0.1'].includes(new URL(config.localRadarUrl).hostname);
 function setReceiverLocation({ latitude, longitude }) {
   const command = process.env.READSB_SET_LOCATION; // dev stand-in
   const [file, args] = command
@@ -303,18 +308,101 @@ function setReceiverLocation({ latitude, longitude }) {
   return new Promise((resolve) => execFile(file, args, { timeout: 30000 }, (err) => resolve(!err)));
 }
 
-// For after a house move: makes the current GPS position the new home. The location registered
-// with Flightradar24 is changed on their website; this brings the device into line with it, so
-// the feeder runs at the new address and no longer at the old one.
-async function setHomeToGps() {
+// Moves the receiver's own position (map centre and range rings) to the position in use, with a
+// message over the local map while the decoder restarts. Resolves to whether the decoder took it.
+const REPOSITION_NOTE = `(() => { if (document.getElementById('__repositioning')) return; const d = document.createElement('div'); d.id = '__repositioning'; d.textContent = 'Repositioning, locating aircraft…'; d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(11,22,34,.9);color:#e8eef5;font:600 28px system-ui,sans-serif'; document.documentElement.append(d); })()`;
+let repositioning = null;
+function reposition() {
+  if (!RECEIVER_IS_HERE || !current) return Promise.resolve(false);
+  repositioning ||= (async () => {
+    let ok, to;
+    do { // again if the position changed while the decoder was restarting
+      to = current;
+      tabs.local.view.webContents.executeJavaScript(REPOSITION_NOTE).catch(() => {});
+      ok = await setReceiverLocation(to);
+      // Give the decoder time to come back and start writing aircraft again (up to half a minute).
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        if ((await receiverStatus()).state === 'ok') break;
+      }
+    } while (to !== current);
+    repositioning = null;
+    tabs.local.load(); // the map reads the receiver's position when it loads; this also clears the message
+    return ok;
+  })();
+  return repositioning;
+}
+
+// Protected storage forgets the decoder's settings at each restart, and a fresh install has none,
+// so at start-up the decoder is brought into line with the position in use if it differs.
+async function alignReceiver() {
+  if (!RECEIVER_IS_HERE || !current) return;
+  try {
+    const receiver = await (await fetch(new URL('data/receiver.json', config.localRadarUrl), { signal: AbortSignal.timeout(3000) })).json();
+    const there = location.valid({ latitude: receiver.lat, longitude: receiver.lon });
+    if (there && feed.distanceKm(current, there) < 0.1) return;
+  } catch {
+    return void setTimeout(alignReceiver, 10000); // the decoder is not up yet
+  }
+  reposition();
+}
+
+// Puts a new position into use: remembered on the device, and the receiver moved to it.
+function moveTo(position) {
+  if (!position || location.same(position, current)) return Promise.resolve(true);
+  current = position;
+  saveOnDevice({ current });
+  return reposition();
+}
+
+// Each GPS fix is put through the rule in location.js. The position only moves once several fixes
+// in a row say it should, so one odd fix changes nothing.
+let pendingMoves = 0;
+function followGps(position) {
+  const next = location.choose(home, current, position, HOME_RADIUS_KM);
+  if (location.same(next, current)) return void (pendingMoves = 0);
+  if (++pendingMoves < FIXES_TO_TRUST) return;
+  pendingMoves = 0;
+  moveTo(next);
+}
+
+// A new home pin. The feeder is decided again against it, and the position in use follows the
+// rule straight away (this is a deliberate change, so there is no waiting for several fixes).
+// The receiver is moved in the background; the map shows its own message while that happens.
+function setHome(position, postcode) {
+  const wasAtHome = !current || location.same(current, home);
+  home = position;
+  saveOnDevice({ home, postcode: postcode || null });
+  feedPaused = null;
+  verdict = { away: null, count: 0 };
+  pendingMoves = 0;
+  moveTo(location.choose(home, wasAtHome ? null : current, freshGps(), HOME_RADIUS_KM));
+  return homeInfo();
+}
+
+// For after a house move, or with no Wi-Fi for a postcode: makes the current GPS position the home
+// pin. The location registered with Flightradar24 is changed on their website; this brings the
+// device into line with it, so the feeder runs at the new address and no longer at the old one.
+function setHomeToGps() {
   const gpsNow = freshGps();
   if (!gpsNow) throw new Error('No GPS fix yet. Try again near a window.');
-  home = { latitude: Number(gpsNow.latitude.toFixed(5)), longitude: Number(gpsNow.longitude.toFixed(5)) };
-  saveOnDevice({ home });
-  feedPaused = null;                  // decide the feeder again against the new home
-  verdict = { away: null, count: 0 };
-  const receiverUpdated = await setReceiverLocation(home);
-  return { ...homeInfo(), receiverUpdated };
+  return setHome(location.round(gpsNow), null);
+}
+
+async function setHomeToPostcode(text) {
+  const { postcode, position } = await location.lookupPostcode(text);
+  return setHome(position, postcode);
+}
+
+// Away from home (on holiday, say) the held position can be up to the radius from where the
+// device has ended up. This takes the GPS position as it is now, without moving the home pin.
+function useGpsNow() {
+  const gpsNow = freshGps();
+  if (!gpsNow) throw new Error('No GPS fix yet. Try again near a window.');
+  if (home && feed.distanceKm(home, gpsNow) <= HOME_RADIUS_KM) throw new Error('This is at home, so the home position is used.');
+  pendingMoves = 0;
+  moveTo(location.round(gpsNow));
+  return homeInfo();
 }
 
 // Settings switch. Off: the feeder runs without waiting for GPS (for a spot where the GPS cannot
@@ -327,8 +415,7 @@ function setFeedRequiresGps(value) {
   return homeInfo();
 }
 
-// Gives both map pages a browser location: the live GPS fix when there is one, otherwise the home
-// coordinates. The browser has no other location source, so without this any page feature that
+// Gives both map pages a browser location: the position in use (see location.js). The browser has no other location source, so without this any page feature that
 // asks "where am I" waits forever: Flightradar24's "my location" button, and the local map's
 // Home (H) button, which asks for the location before it re-centres.
 function shareLocationWithMaps() {
@@ -339,12 +426,12 @@ function shareLocationWithMaps() {
   // position set once would answer the first request and leave every later one waiting forever.
   // Re-sending it on a timer keeps the buttons working and also survives page reloads.
   setInterval(() => {
-    const current = gpsFix || (home && { ...home, accuracy: 100 });
     if (!current) return;
+    const here = { ...current, accuracy: 100 };
     for (const wc of pages) {
       try {
         if (!wc.debugger.isAttached()) wc.debugger.attach();
-        wc.debugger.sendCommand('Emulation.setGeolocationOverride', current).catch(() => {});
+        wc.debugger.sendCommand('Emulation.setGeolocationOverride', here).catch(() => {});
       } catch { /* view not ready yet; the next tick tries again */ }
     }
   }, LOCATION_EVERY_MS);
@@ -426,7 +513,9 @@ app.whenReady().then(() => {
     gpsFix = position;
     gpsFixAt = Date.now();
     controlFeedFromGps(position);
+    followGps(position);
   });
+  alignReceiver();
   // Nothing else starts the feeder at boot (see scripts/install-fr24.sh), so when it is not
   // waiting for GPS it is started here.
   if (!feedWaitsForGps()) feed.setRunning(true);
@@ -463,7 +552,9 @@ app.whenReady().then(() => {
   ipcMain.handle('wifi:connect', (_e, ssid, password) => reply(wifi.connect(ssid, password).then(wifiChanged)));
   ipcMain.handle('wifi:forget', (_e, ssid) => reply(wifi.forget(ssid).then(wifiChanged)));
   ipcMain.handle('home:get', () => homeInfo());
-  ipcMain.handle('home:set', () => reply(setHomeToGps()));
+  ipcMain.handle('home:set', () => reply(Promise.resolve().then(setHomeToGps)));
+  ipcMain.handle('home:postcode', (_e, text) => reply(setHomeToPostcode(text)));
+  ipcMain.handle('home:useGps', () => reply(Promise.resolve().then(useGpsNow)));
   ipcMain.handle('home:feedWait', (_e, value) => setFeedRequiresGps(value));
   ipcMain.handle('display:get', () => ({ ...display.get(), storageRestored: storageRestored() }));
   ipcMain.handle('display:set', (_e, patch) => {

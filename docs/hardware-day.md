@@ -33,7 +33,7 @@ Work from the top: later checks depend on earlier ones. Run commands in a termin
 ```sh
 git clone https://github.com/dripster82/flight-radar-display.git ~/flight-radar-display
 cd ~/flight-radar-display
-scripts/install.sh 53.9583 -1.0803      # your own latitude and longitude
+scripts/install.sh
 sudo reboot
 ```
 
@@ -85,7 +85,10 @@ sudo reboot
 | Back to start page | On the Flightradar24 tab, follow a link away from the site, then Settings > Flightradar24 > Back to start page | Back at the Flightradar24 start page | — |
 | Sign out and start again | Settings > Flightradar24, tap twice | Flightradar24 opens signed out | — |
 | The sign-in survives a restart | `sudo reboot` | Still signed in | Check the app's data folder is writable |
-| "My location" on Flightradar24 | Tap its location button | Centres on the GPS (or home) position | — |
+| Home by postcode | Settings > Home > Set by postcode, type the postcode, Set | Home shows the postcode and coordinates; Location says "At home"; the local map shows "Repositioning, locating aircraft…" then re-centres | Needs Wi-Fi. No GPS needed |
+| Home by GPS | Settings > Set home to GPS position, tap twice | Home shows the GPS coordinates | Needs a GPS fix |
+| Position survives a restart | `sudo reboot`, then `curl -s http://localhost/tar1090/data/receiver.json` | `lat` and `lon` match Home | Tell Claude the output |
+| "My location" on Flightradar24 | Tap its location button | Centres on the position in use (home, when at home) | — |
 
 ## 7. Power-cut protection
 
@@ -127,7 +130,7 @@ scripts/install-fr24.sh
 |---|---|---|---|
 | Feeder status can be read | `curl -s http://127.0.0.1:8754/monitor.json \| head -c 300` | Text containing `feed_status` | Tell Claude the output: the app reads this to show the Feed chip |
 | Feed chip | Look at the top bar, at home with a GPS fix | "Feeding" | Settings shows why it is waiting |
-| Feed pauses away from home | Settings > "Set home to GPS position" somewhere else, or change `home` in `config.json` to a far-off position and restart | "Paused: away from home" | — |
+| Feed pauses away from home | Settings > Set by postcode, with a postcode in another town | "Paused: away from home" | — |
 | Protect again | `scripts/protect.sh enable && sudo reboot` | As section 7 | — |
 
 ## Passwordless sudo
