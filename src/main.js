@@ -12,6 +12,7 @@ const display = require('./display');
 const location = require('./location');
 const log = require('./log');
 const update = require('./update');
+const fr24 = require('./fr24');
 
 // With power-cut protection on, the system is read-only and the app's data lives in separate
 // writable storage areas (see scripts/data-area.sh): the browser's data, which holds the
@@ -115,6 +116,10 @@ if (process.env.HOME_LOCATION) {
 // approved list and draw everything with the processor instead, which makes the maps slow. These
 // tell it to use the chip anyway. If the chip then fails, the engine falls back by itself; the log
 // says which it ended up with ("gpu"). "graphicsAcceleration": false in config.json leaves it alone.
+// Flightradar24's adverts are kept out, because they slow the device badly (see fr24.js).
+const BLOCK_ADVERTS = config.fr24BlockAdverts !== false;
+if (BLOCK_ADVERTS) fr24.hideAdvertSites(app);
+log('start', `Flightradar24 adverts ${BLOCK_ADVERTS ? 'kept out' : 'allowed'}`);
 if (process.platform === 'linux' && config.graphicsAcceleration !== false) {
   app.commandLine.appendSwitch('ignore-gpu-blocklist');
   app.commandLine.appendSwitch('enable-gpu-rasterization');
@@ -334,6 +339,7 @@ function createTab(tab) {
   wc.on('render-process-gone', (_e, details) => log('crash', `${name} page stopped: ${details.reason} (exit code ${details.exitCode})`));
   wc.on('unresponsive', () => log('error', `${name} page stopped responding`));
   wc.on('responsive', () => log('error', `${name} page is responding again`));
+  if (tab === tabs.fr24 && BLOCK_ADVERTS) fr24.refuseOtherFrames(wc.session);
   tab.load();
   win.contentView.addChildView(tab.view);
 }
@@ -574,6 +580,12 @@ function watchPower() {
 }
 
 app.whenReady().then(() => {
+  // The app normally runs about ten processes. Many more means web pages are filling up with
+  // frames again (adverts that fr24.js does not know about), which is what makes it sluggish.
+  setInterval(() => {
+    const count = app.getAppMetrics().length;
+    log.state('processes', 'load', count > 15 ? 'many processes' : 'normal number of processes', `(${count})`);
+  }, 60000);
   const restored = storageRestored();
   if (restored) log('storage', restored);
   watchPower();

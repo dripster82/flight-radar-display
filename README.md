@@ -194,6 +194,7 @@ shows what is in force.
 | `night` | Hours during which the screen dims to `brightness` percent, when night dimming is on. |
 | `zoom` | 1.5 suits the 1280x720 Touch Display 2; use 1 on an 800x480 screen. |
 | `graphicsAcceleration` | Leave out, or `true`: the app tells the browser engine to use the Pi's graphics chip even where it would not by default. `false` leaves the engine to decide, for use if the screen ever shows drawing faults. The log's `gpu` line says what is in force. |
+| `fr24BlockAdverts` | Leave out, or `true`: the advert and tracker sites that the free Flightradar24 page loads are kept out (`src/fr24.js`, list in `src/fr24-blocked.json`). Each advert frame is a process of its own, and together they took more than a whole processor core and made the screen sluggish. `false` lets them load. The log's `load` line reports if the number of processes climbs again. |
 | `screenRotation` | 90 or 270 turns the portrait Touch Display 2 to landscape (whichever way up the enclosure holds it); 0 leaves the picture alone. Applied each time the kiosk starts. |
 | `splashRotation` | Optional. The same for the start-up splash, if it comes out the other way up from the app. Re-run `scripts/install.sh` after changing it. |
 | `welcome` | `title` and `message` shown once at the first start; leave both empty for none. |
