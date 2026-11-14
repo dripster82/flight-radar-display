@@ -29,4 +29,11 @@ function refuseOtherFrames(session) {
   });
 }
 
-module.exports = { hideAdvertSites, refuseOtherFrames };
+// The free site keeps a promotional panel down the right-hand side, which takes two fifths of
+// a screen this small ("fr24HidePanel": false in config.json leaves it). The header above the
+// map is told about the panel's width separately, so it is stretched back over the full width.
+function hidePanel(wc) {
+  wc.on('dom-ready', () => wc.insertCSS('aside[data-testid="sidebar__container"] { display: none !important; } .right-sidebar { right: 0 !important; }').catch(() => {}));
+}
+
+module.exports = { hideAdvertSites, refuseOtherFrames, hidePanel };

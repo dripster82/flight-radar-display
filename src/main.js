@@ -340,6 +340,7 @@ function createTab(tab) {
   wc.on('unresponsive', () => log('error', `${name} page stopped responding`));
   wc.on('responsive', () => log('error', `${name} page is responding again`));
   if (tab === tabs.fr24 && BLOCK_ADVERTS) fr24.refuseOtherFrames(wc.session);
+  if (tab === tabs.fr24 && config.fr24HidePanel !== false) fr24.hidePanel(wc);
   tab.load();
   win.contentView.addChildView(tab.view);
 }
