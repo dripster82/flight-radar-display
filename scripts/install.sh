@@ -111,15 +111,24 @@ labwc_config="$HOME/.config/labwc/rc.xml"
 touch_line="  <touch mapToOutput=\"$screen\" mouseEmulation=\"no\"/>"
 mkdir -p "$(dirname "$labwc_config")"
 if grep -q 'mapToOutput' "$labwc_config" 2>/dev/null; then
-  echo "already configured"
+  # Raspberry Pi OS writes its own line here with mouse emulation on, which turns every touch
+  # into a mouse click: nothing can then be swiped or pinched, only clicked.
+  if grep -q 'mouseEmulation="yes"' "$labwc_config"; then
+    sed -i 's/mouseEmulation="yes"/mouseEmulation="no"/g' "$labwc_config"
+    pkill -HUP -x labwc || true   # labwc reads its settings again
+    echo "touches now reach the app as touches, not mouse clicks"
+  else
+    echo "already configured"
+  fi
 else
   # Start from the system's own settings when the user has none, so nothing else is lost.
   if [ ! -f "$labwc_config" ]; then
     if [ -f /etc/xdg/labwc/rc.xml ]; then cp /etc/xdg/labwc/rc.xml "$labwc_config"
     else printf '<?xml version="1.0"?>\n<labwc_config>\n</labwc_config>\n' > "$labwc_config"; fi
   fi
-  if grep -q '</labwc_config>' "$labwc_config"; then
-    sed -i "s|</labwc_config>|$touch_line\n</labwc_config>|" "$labwc_config"
+  if grep -q -E '</(labwc|openbox)_config>' "$labwc_config"; then
+    sed -i -E -e 's/mouseEmulation="yes"/mouseEmulation="no"/g' -e "s#</(labwc|openbox)_config>#$touch_line\n</\1_config>#" "$labwc_config"
+    pkill -HUP -x labwc || true
     echo "touchscreen mapped to $screen"
   else
     echo "WARNING: $labwc_config has an unexpected layout; add this line inside it by hand:" >&2
