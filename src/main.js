@@ -136,6 +136,7 @@ if (!process.env.HOME_LOCATION && location.valid(onDevice.home)) home = location
 // position (see location.js). Kept across restarts so it is right before the first GPS fix.
 let current = (!process.env.HOME_LOCATION && location.valid(onDevice.current)) || home;
 let feedRequiresGps = typeof onDevice.feedRequiresGps === 'boolean' ? onDevice.feedRequiresGps : config.feedRequiresGps !== false;
+let feedShare = onDevice.feedShare !== false; // Settings > Flightradar24 > Share: off means the feeder never runs
 const saveOnDevice = (patch) => {
   onDevice = { ...onDevice, ...patch };
   // Written to a new file and then swapped in, so a power cut leaves the old file or the new one, never half of one.
@@ -172,6 +173,8 @@ const UNIT_LABEL = { km: 'km', miles: 'mi', nautical: 'nmi' };
 const HIDDEN_MAP_BUTTONS = ['T', 'K', 'M', 'P', 'R'];
 function hideMapButtons(wc) {
   wc.insertCSS(`${HIDDEN_MAP_BUTTONS.map((id) => `#${id}.button`).join(', ')} { display: none !important; }`).catch(() => {});
+  // tar1090 puts its "problem fetching data" notice off to the lower left; here it sits in the middle.
+  wc.insertCSS('.error_box { left: 50% !important; top: 50% !important; bottom: auto !important; transform: translate(-50%, -50%); width: max-content; max-width: 90%; }').catch(() => {});
 }
 
 // For the "Radar scope" map style: once the local map has loaded, the wireframe-and-sweep overlay
@@ -355,6 +358,7 @@ function controlFeedFromGps(position) {
   if (away !== verdict.away) verdict = { away, count: 0 };
   if (++verdict.count < FIXES_TO_TRUST || away === feedPaused) return;
   feedPaused = away;
+  if (!feedShare) return; // switched off in Settings: it stays stopped wherever the device is
   log('feed', away ? 'GPS says away from home: stopping the Flightradar24 feeder' : 'GPS says at home: starting the Flightradar24 feeder');
   feed.setRunning(!away);
 }
@@ -369,6 +373,7 @@ function homeInfo() {
     current,
     atHome: location.same(current, home),
     feedRequiresGps,
+    feedShare,
     hasGps: Boolean(gpsNow),
     distanceKm: current && gpsNow ? feed.distanceKm(current, gpsNow) : null, // from the position in use to the GPS
   };
@@ -488,7 +493,7 @@ function useGpsNow() {
 function setFeedRequiresGps(value) {
   feedRequiresGps = Boolean(value);
   saveOnDevice({ feedRequiresGps });
-  if (!feedRequiresGps && feedPaused === null) feed.setRunning(true); // was being held back; let it go
+  if (feedShare && !feedRequiresGps && feedPaused === null) feed.setRunning(true); // was being held back; let it go
   sendStatus();
   return homeInfo();
 }
@@ -527,10 +532,23 @@ async function receiverStatus() {
   }
 }
 
+// Settings switch. Off: nothing is sent to Flightradar24; the feeder is stopped and stays stopped
+// until this is switched back on. On: it runs under the usual rules (at home, by GPS).
+function setFeedShare(value) {
+  feedShare = Boolean(value);
+  saveOnDevice({ feedShare });
+  log('feed', feedShare ? 'sharing with Flightradar24 switched on in Settings' : 'sharing with Flightradar24 switched off in Settings: stopping the feeder');
+  if (!feedShare) feed.setRunning(false);
+  else if (feedPaused === false || (feedPaused === null && !feedWaitsForGps())) feed.setRunning(true);
+  sendStatus();
+  return homeInfo();
+}
+
 // Every light reflects a real check; nothing here is assumed.
 async function sendStatus() {
   const [receiver, feeder, network] = await Promise.all([receiverStatus(), feed.status(), wifi.status()]);
-  if (feeder.state === 'off' && feedPaused) feeder.state = 'paused';
+  if (feeder.state === 'off' && !feedShare) feeder.state = 'disabled';
+  else if (feeder.state === 'off' && feedPaused) feeder.state = 'paused';
   else if (feeder.state === 'off' && feedPaused === null && feedWaitsForGps()) feeder.state = 'waiting';
   const gpsState = { state: Date.now() - gpsFixAt < GPS_FRESH_MS ? 'ok' : 'bad' };
   log.state('status:receiver', 'status', `receiver: ${receiver.state === 'ok' ? 'working' : 'no aircraft data'}`);
@@ -634,8 +652,8 @@ app.whenReady().then(() => {
   alignReceiver();
   // Nothing else starts the feeder at boot (see scripts/install-fr24.sh), so when it is not
   // waiting for GPS it is started here.
-  log('feed', feedWaitsForGps() ? 'Flightradar24 feeder waits until the GPS shows the device is at home' : 'starting the Flightradar24 feeder');
-  if (!feedWaitsForGps()) feed.setRunning(true);
+  log('feed', !feedShare ? 'sharing with Flightradar24 is switched off in Settings; the feeder is not started' : feedWaitsForGps() ? 'Flightradar24 feeder waits until the GPS shows the device is at home' : 'starting the Flightradar24 feeder');
+  if (feedShare && !feedWaitsForGps()) feed.setRunning(true);
   shareLocationWithMaps();
   setInterval(sendStatus, STATUS_EVERY_MS);
 
@@ -682,6 +700,7 @@ app.whenReady().then(() => {
   ipcMain.handle('home:postcode', (_e, text) => reply(setHomeToPostcode(text).catch((err) => { log('location', `postcode lookup failed: ${err.message}`); throw err; })));
   ipcMain.handle('home:useGps', () => reply(Promise.resolve().then(useGpsNow)));
   ipcMain.handle('home:feedWait', (_e, value) => setFeedRequiresGps(value));
+  ipcMain.handle('feed:share', (_e, value) => setFeedShare(value));
   ipcMain.handle('display:get', () => ({ ...display.get(), storageRestored: storageRestored() }));
   ipcMain.handle('display:set', (_e, patch) => {
     const before = localUrl();

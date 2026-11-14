@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('radar', {
   homePostcode: (text) => ipcRenderer.invoke('home:postcode', text),
   homeUseGps: () => ipcRenderer.invoke('home:useGps'),
   homeFeedWait: (value) => ipcRenderer.invoke('home:feedWait', value),
+  feedShare: (value) => ipcRenderer.invoke('feed:share', value),
   displayGet: () => ipcRenderer.invoke('display:get'),
   displaySet: (patch) => ipcRenderer.invoke('display:set', patch),
   keyboardKey: (key) => ipcRenderer.send('keyboard:key', key),

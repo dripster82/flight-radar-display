@@ -8,7 +8,17 @@
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
-  body { font: 17px var(--font); user-select: none; display: flex; flex-direction: column; min-height: 100vh; }
+  body { font: 17px var(--font); user-select: none; display: flex; height: 100vh; }
+
+  /* The groups down the left; the chosen group's settings fill the rest. While something is being
+     typed (a Wi-Fi password, the postcode) the menu and the groups make way for the keyboard. */
+  #menu { flex: none; width: 168px; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-right: 1px solid var(--line); }
+  #menu button { flex: 1; max-height: 60px; padding: 0 14px; text-align: left; background: transparent; border-radius: 8px; }
+  #menu button.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-y: auto; }
+  body.entering #menu, body.entering section { display: none; }
+  section > div { flex-wrap: wrap; row-gap: 8px; border-bottom: 1px solid var(--line); }
+  section > div:last-of-type { border-bottom: 0; }
   button { font: inherit; color: inherit; border: 0; touch-action: manipulation; }
   [hidden] { display: none !important; }
 
@@ -17,6 +27,7 @@
               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #status { padding: 0 12px 6px; min-height: 26px; font-size: 15px; color: var(--muted); }
   #status.error { color: var(--bad); }
+  #status:empty { display: none; }
   .action { background: var(--panel); border-radius: 8px; padding: 8px 16px; min-height: 36px; }
   .action.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
@@ -30,15 +41,15 @@
   #networks .meta { font-size: 14px; color: var(--muted); }
   #networks .connected .meta { color: var(--ok); }
 
-  #display { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
-  #display .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
+  #display { display: flex; align-items: center; gap: 10px; padding: 12px; }
+  #display .label { flex: 1; color: var(--strong); font-weight: 600; }
   #display #level { min-width: 52px; text-align: center; }
   #display .action { min-width: 48px; }
   #display .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
 
-  .where { display: flex; align-items: center; gap: 10px; padding: 8px 12px 0; }
-  .where .label { color: var(--strong); font-weight: 600; font-size: 18px; }
-  .where .text { flex: 1; font-size: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .where { display: flex; align-items: center; gap: 10px; padding: 12px; }
+  .where .label { flex: 1; color: var(--strong); font-weight: 600; }
+  .where .text { order: 3; flex-basis: 100%; font-size: 14px; color: var(--muted); }   /* on a line of its own under the label and buttons */
   .where .action:disabled { opacity: .45; }
   .where .action.confirm { background: var(--danger); color: #ffffff; }
   .where .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
@@ -47,16 +58,14 @@
   #entry { flex: 1; display: flex; flex-direction: column; }
   #keys { padding: 0 5px 5px; }
   #password { margin: 0 12px 8px; padding: 0 12px; height: 44px; line-height: 42px; border-radius: 8px;
-              background: var(--panel); color: var(--strong); font: 20px ui-monospace, monospace;
+              background: var(--panel); color: var(--strong); font: 20px/42px ui-monospace, monospace;
               white-space: pre; overflow: hidden; direction: rtl; text-align: left; }
   #password:empty::before { content: attr(data-hint); color: var(--muted); font-family: var(--font); }
-  #restored { white-space: pre-line; margin: 8px 12px 0; padding: 10px 12px; border-radius: 8px; background: var(--danger); color: #ffffff; font-size: 15px; }
-  .choices { display: flex; align-items: center; gap: 8px; padding: 8px 12px 0; }
-  .choices .label { flex: 1; color: var(--strong); font-weight: 600; font-size: 18px; }
+  #restored { white-space: pre-line; margin: 0 12px 8px; padding: 10px 12px; border-radius: 8px; background: var(--danger); color: #ffffff; font-size: 15px; }
+  .choices { display: flex; align-items: center; gap: 8px; padding: 12px; }
+  .choices .label { flex: 1; color: var(--strong); font-weight: 600; }
   .choices .action.on { background: var(--accent); color: var(--accent-text); font-weight: 600; }
   .choices .action.confirm { background: var(--danger); color: #ffffff; }
-  #diagnostics { padding-bottom: 12px; }
-  #updateText { white-space: normal; }
   #updates .action.confirm { background: var(--danger); color: #ffffff; }
   #logView { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; background: var(--bg); }
   #logLines { flex: 1; margin: 0; padding: 0 12px 12px; overflow: auto; user-select: text;
@@ -65,62 +74,100 @@
 </style>
 </head>
 <body>
-  <div id="display" hidden>
-    <span class="label">Brightness</span>
-    <button class="action" id="darker" aria-label="Darker">−</button>
-    <span id="level"></span>
-    <button class="action" id="brighter" aria-label="Brighter">+</button>
-    <button class="action" id="nightDim"></button>
-  </div>
-  <div id="home" class="where">
-    <span class="label">Home</span>
-    <span id="homeText" class="text"></span>
-    <button class="action" id="setPostcode">Set by postcode</button>
-    <button class="action" id="setHome">Set home to GPS position</button>
-  </div>
-  <div id="place" class="where">
-    <span class="label">Location</span>
-    <span id="placeText" class="text"></span>
-    <button class="action" id="feedWait"></button>
-    <button class="action" id="useGps">Use GPS position now</button>
-  </div>
-  <div id="restored" hidden></div>
-  <div id="themes" class="choices">
-    <span class="label">Theme</span>
-  </div>
-  <div id="mapStyles" class="choices">
-    <span class="label">Local map</span>
-  </div>
-  <div id="mapOptions" class="choices">
-    <span class="label">Map shows</span>
-  </div>
-  <div id="fr24" class="choices">
-    <span class="label">Flightradar24</span>
-    <button class="action" id="fr24Home">Back to start page</button>
-    <button class="action" id="fr24SignOut">Sign out and start again</button>
-  </div>
-  <div id="welcome" class="choices" hidden>
-    <span class="label">Message</span>
-    <button class="action" id="welcomeShow">View Christmas message</button>
-  </div>
-  <header>
-    <h1 id="title">Wi-Fi networks</h1>
-    <button class="action" id="refresh">Refresh</button>
-    <button class="action" id="cancel" hidden>Cancel</button>
-    <button class="action primary" id="join" hidden>Join</button>
-  </header>
-  <div id="status" role="status"></div>
-  <ul id="networks"></ul>
-  <div id="updates" class="where">
-    <span class="label">Updates</span>
-    <span id="updateText" class="text"></span>
-    <button class="action" id="updateCheck">Check for updates</button>
-    <button class="action primary" id="updateStart" hidden>Update now</button>
-  </div>
-  <div id="diagnostics" class="choices">
-    <span class="label">Diagnostics</span>
-    <button class="action" id="logShow">View log</button>
-  </div>
+  <nav id="menu">
+    <button data-section="screen">Screen</button>
+    <button data-section="map">Map</button>
+    <button data-section="location">Location</button>
+    <button data-section="wifi">Wi-Fi</button>
+    <button data-section="fr24">Flightradar24</button>
+    <button data-section="about">About</button>
+  </nav>
+  <main>
+    <header>
+      <h1 id="title"></h1>
+      <button class="action" id="refresh" hidden>Refresh</button>
+      <button class="action" id="cancel" hidden>Cancel</button>
+      <button class="action primary" id="join" hidden>Join</button>
+    </header>
+    <div id="status" role="status"></div>
+    <div id="restored" hidden></div>
+
+    <section id="s-screen">
+      <div id="display" hidden>
+        <span class="label">Brightness</span>
+        <button class="action" id="darker" aria-label="Darker">−</button>
+        <span id="level"></span>
+        <button class="action" id="brighter" aria-label="Brighter">+</button>
+        <button class="action" id="nightDim"></button>
+      </div>
+      <div id="themes" class="choices">
+        <span class="label">Theme</span>
+      </div>
+      <div id="welcome" class="choices" hidden>
+        <span class="label">Christmas message</span>
+        <button class="action" id="welcomeShow">View</button>
+      </div>
+    </section>
+
+    <section id="s-map" hidden>
+      <div id="mapStyles" class="choices">
+        <span class="label">Style</span>
+      </div>
+      <div id="mapOptions" class="choices">
+        <span class="label">Shows</span>
+      </div>
+    </section>
+
+    <section id="s-location" hidden>
+      <div id="home" class="where">
+        <span class="label">Home</span>
+        <span id="homeText" class="text"></span>
+        <button class="action" id="setPostcode">Set by postcode</button>
+        <button class="action" id="setHome">Set home to GPS position</button>
+      </div>
+      <div id="place" class="where">
+        <span class="label">Location</span>
+        <span id="placeText" class="text"></span>
+        <button class="action" id="feedWait"></button>
+        <button class="action" id="useGps">Use GPS position now</button>
+      </div>
+    </section>
+
+    <section id="s-wifi" hidden>
+      <ul id="networks"></ul>
+    </section>
+
+    <section id="s-fr24" hidden>
+      <div id="share" class="where">
+        <span class="label">Share with Flightradar24</span>
+        <span id="shareText" class="text"></span>
+        <button class="action" id="feedShare"></button>
+      </div>
+      <div id="fr24" class="choices">
+        <span class="label">If the page is stuck</span>
+        <button class="action" id="fr24Home">Back to start page</button>
+        <button class="action" id="fr24SignOut">Sign out and start again</button>
+      </div>
+    </section>
+
+    <section id="s-about" hidden>
+      <div id="updates" class="where">
+        <span class="label">Updates</span>
+        <span id="updateText" class="text"></span>
+        <button class="action" id="updateCheck">Check for updates</button>
+        <button class="action primary" id="updateStart" hidden>Update now</button>
+      </div>
+      <div id="diagnostics" class="choices">
+        <span class="label">Diagnostics</span>
+        <button class="action" id="logShow">View log</button>
+      </div>
+    </section>
+
+    <div id="entry" hidden>
+      <div id="password" aria-label="Password" data-hint="Password"></div>
+      <div id="keys"></div>
+    </div>
+  </main>
   <div id="logView" hidden>
     <header>
       <h1>Log, newest first</h1>
@@ -128,10 +175,6 @@
       <button class="action primary" id="logClose">Close</button>
     </header>
     <div id="logLines"></div>
-  </div>
-  <div id="entry" hidden>
-    <div id="password" aria-label="Password" data-hint="Password"></div>
-    <div id="keys"></div>
   </div>
 
 <script src="keys.js"></script>
@@ -141,11 +184,24 @@
   let screen = null; // brightness settings; stays null where the backlight cannot be controlled
   let hasWelcome = false;
 
+  // One group of settings shows at a time, chosen from the menu down the left.
+  const SECTIONS = { screen: 'Screen', map: 'Map', location: 'Location', wifi: 'Wi-Fi networks', fr24: 'Flightradar24', about: 'About' };
+  let section = 'screen';
+  function showSection(name) {
+    section = name;
+    for (const id of Object.keys(SECTIONS)) $(`s-${id}`).hidden = id !== name;
+    for (const b of document.querySelectorAll('#menu button')) b.classList.toggle('on', b.dataset.section === name);
+    $('title').textContent = SECTIONS[name];
+    $('refresh').hidden = name !== 'wifi';
+  }
+  for (const b of document.querySelectorAll('#menu button')) {
+    b.addEventListener('click', () => { setStatus(''); showSection(b.dataset.section); if (b.dataset.section === 'wifi') refresh(); });
+  }
+
   function drawDisplay() {
-    $('display').hidden = !screen || !screen.available || Boolean(target);
-    for (const id of ['themes', 'mapStyles', 'mapOptions', 'fr24']) $(id).hidden = !screen || Boolean(target);
-    $('welcome').hidden = !hasWelcome || Boolean(target);
-    $('diagnostics').hidden = $('updates').hidden = Boolean(target);
+    $('display').hidden = !screen || !screen.available;
+    for (const id of ['themes', 'mapStyles', 'mapOptions']) $(id).hidden = !screen;
+    $('welcome').hidden = !hasWelcome;
     if (!screen) return;
     document.documentElement.dataset.theme = screen.theme;
     // One button per choice; the current one is highlighted.
@@ -189,7 +245,6 @@
   let homeConfirm = null;
   const coords = (p) => `${p.latitude.toFixed(4)}, ${p.longitude.toFixed(4)}`;
   function drawHome(info, note) {
-    $('home').hidden = $('place').hidden = Boolean(target);
     $('homeText').textContent = note || (info.home ? `${info.postcode ? `${info.postcode} · ` : ''}${coords(info.home)}` : 'not set');
     const where = info.atHome ? 'At home' : info.current ? `Away, at ${coords(info.current)}` : 'Waiting for GPS';
     const gps = !info.hasGps ? 'no GPS fix' : info.distanceKm === null ? 'GPS ready' : `GPS is ${info.distanceKm < 10 ? info.distanceKm.toFixed(1) : Math.round(info.distanceKm)} km from here`;
@@ -199,6 +254,10 @@
     $('feedWait').textContent = `Feed waits for GPS: ${info.feedRequiresGps ? 'On' : 'Off'}`;
     $('feedWait').classList.toggle('on', info.feedRequiresGps);
     $('feedWait').dataset.on = info.feedRequiresGps ? '1' : '';
+    $('feedShare').textContent = info.feedShare ? 'On' : 'Off';
+    $('feedShare').classList.toggle('on', info.feedShare);
+    $('feedShare').dataset.on = info.feedShare ? '1' : '';
+    $('shareText').textContent = info.feedShare ? 'Aircraft picked up by this receiver are sent to Flightradar24 while it is at home.' : 'Nothing is sent to Flightradar24. The map and My Receiver work as usual.';
   }
   async function refreshHome() { if (!homeConfirm) drawHome(await window.radar.homeGet()); }
   function endHomeConfirm() {
@@ -215,21 +274,21 @@
 
   function showList() {
     target = null;
-    $('title').textContent = 'Wi-Fi networks';
-    for (const [id, hidden] of [['networks', false], ['refresh', false], ['entry', true], ['cancel', true], ['join', true]]) $(id).hidden = hidden;
-    $('home').hidden = $('place').hidden = false;
+    document.body.classList.remove('entering');
+    for (const id of ['entry', 'cancel', 'join']) $(id).hidden = true;
     $('join').textContent = 'Join';
-    drawDisplay();
+    showSection(section);
   }
 
   function showEntry(network) {
     target = network; password = '';
     $('title').textContent = network.ssid;
-    for (const [id, hidden] of [['networks', true], ['refresh', true], ['entry', false], ['cancel', false], ['join', false]]) $(id).hidden = hidden;
-    $('home').hidden = $('place').hidden = true;
+    document.body.classList.add('entering');
+    $('refresh').hidden = true;
+    for (const id of ['entry', 'cancel', 'join']) $(id).hidden = false;
     $('join').textContent = network.postcode ? 'Set' : 'Join';
     $('password').dataset.hint = network.postcode ? 'Postcode' : 'Password';
-    keyboard.reset(); drawPassword(); drawDisplay();
+    keyboard.reset(); drawPassword();
   }
 
   const keyboard = onScreenKeyboard($('keys'), {
@@ -370,7 +429,7 @@
     window.radar.fr24SignOut();
   });
   // Only offered when config.json has a welcome title or message.
-  window.radar.welcomeGet().then((text) => { hasWelcome = Boolean(text.title || text.message); $('welcome').hidden = !hasWelcome || Boolean(target); });
+  window.radar.welcomeGet().then((text) => { hasWelcome = Boolean(text.title || text.message); $('welcome').hidden = !hasWelcome; });
   $('welcomeShow').addEventListener('click', () => window.radar.welcomeShow());
   // Updates (src/update.js). Checking needs Wi-Fi. Installing needs a second tap, because it
   // restarts the app (and, with power-cut protection on, the whole device, twice).
@@ -418,6 +477,7 @@
   $('logRefresh').addEventListener('click', drawLog);
   $('logClose').addEventListener('click', () => { $('logView').hidden = true; });
   $('feedWait').addEventListener('click', async () => drawHome(await window.radar.homeFeedWait(!$('feedWait').dataset.on)));
+  $('feedShare').addEventListener('click', async () => drawHome(await window.radar.feedShare(!$('feedShare').dataset.on)));
   refreshHome();
   setInterval(refreshHome, 5000);
   window.radar.displayGet().then((d) => {
@@ -428,7 +488,8 @@
       $('restored').hidden = false;
     }
   });
-  window.radar.onActive((name) => { if (name === 'wifi' && !target) refresh(); });
+  window.radar.onActive((name) => { if (name === 'wifi' && !target && section === 'wifi') refresh(); });
+  showSection(section);
 </script>
 </body>
 </html>

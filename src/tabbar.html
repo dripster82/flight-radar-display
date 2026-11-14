@@ -56,7 +56,7 @@
   });
 
   // Green = working, red = not working, amber = held back on purpose, grey = not present on this machine.
-  const MEANING = { ok: 'working', bad: 'not working', paused: 'paused while away from home', waiting: 'waiting for a GPS fix at home', off: 'not running' };
+  const MEANING = { ok: 'working', bad: 'not working', paused: 'paused while away from home', waiting: 'waiting for a GPS fix at home', disabled: 'sharing switched off in Settings', off: 'not running' };
   function light(id, name, status, text) {
     const el = document.getElementById(id);
     el.dataset.state = status.state;
